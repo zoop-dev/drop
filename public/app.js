@@ -81,6 +81,19 @@ function showRoomError(msg) {
   setDropEnabled(false);
 }
 
+let connectedResolve = null;
+let connectedPromise = null;
+
+function waitConnected() {
+  if (state.ws?.readyState === WebSocket.OPEN && !state.reconnecting) return Promise.resolve();
+  if (!connectedPromise) connectedPromise = new Promise(r => { connectedResolve = r; });
+  return connectedPromise;
+}
+
+function resolveConnected() {
+  if (connectedResolve) { connectedResolve(); connectedResolve = null; connectedPromise = null; }
+}
+
 function connect(code) {
   if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(); }
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -91,7 +104,7 @@ function connect(code) {
     if (e.code === 1000) return;
     state.reconnecting = true;
     renderPeers();
-    setTimeout(() => { if (state.roomCode && state.reconnecting) connect(state.roomCode); }, 1500);
+    if (state.roomCode) connect(state.roomCode);
   };
 }
 
@@ -113,6 +126,7 @@ async function handleMessage(msg) {
     case 'welcome':
       state.myId = msg.peerId;
       state.reconnecting = false;
+      resolveConnected();
       Object.keys(state.peers).forEach(id => delete state.peers[id]);
       msg.peers.forEach(p => addPeer(p.id, p.name));
       if (!state.isCreator && msg.peers.length === 0)
@@ -238,6 +252,7 @@ function markTransferReceived(fileId, filename, blobUrl) {
 }
 
 async function queueFiles(files) {
+  if (state.roomCode && state.reconnecting) await waitConnected();
   const peerIds = Object.keys(state.peers);
   if (!peerIds.length) {
     const sub = document.getElementById('drop-sub');
@@ -476,6 +491,7 @@ document.getElementById('code-input').addEventListener('keydown', e => {
 document.getElementById('back-btn').addEventListener('click', () => {
   if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(1000); }
   Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, sendQueue: [] });
+  connectedResolve = null; connectedPromise = null;
   const list = document.getElementById('peers-list');
   list.innerHTML = '';
   list.appendChild(noPeersEl);

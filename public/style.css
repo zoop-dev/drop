@@ -36,6 +36,15 @@ header {
 
 .logo { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: var(--blue); }
 
+.header-right { display: flex; align-items: center; gap: 10px; }
+
+.version-badge {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
 .back-btn {
   background: none;
   border: none;
