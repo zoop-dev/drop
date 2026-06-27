@@ -106,12 +106,12 @@ function connect(code) {
     if (e.code === 1000) return;
     state.reconnecting = true;
     renderPeers();
-    if (state.roomCode) connect(state.roomCode);
+    if (state.roomCode && document.visibilityState === 'visible') connect(state.roomCode);
   };
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && state.roomCode) {
+  if (document.visibilityState === 'visible' && state.roomCode && state.reconnecting) {
     const ws = state.ws;
     if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
       connect(state.roomCode);
@@ -322,7 +322,9 @@ async function queueFiles(files) {
 
 async function startSendingBatch(fromPeerId, batchId) {
   const entries = state.sendQueue.filter(e => e.batchId === batchId && e.pendingTargets.has(fromPeerId));
-  for (const entry of entries) await startSendingFile(fromPeerId, entry.fileId);
+  for (const entry of entries) {
+    await startSendingFile(fromPeerId, entry.fileId);
+  }
 }
 
 async function startSendingFile(fromPeerId, fileId) {
