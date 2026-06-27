@@ -143,6 +143,13 @@ export default {
       return env.ROOMS.getByName(code).fetch(request);
     }
 
-    return env.ASSETS.fetch(request);
+    const res = await env.ASSETS.fetch(request);
+    const ct = res.headers.get('Content-Type') ?? '';
+    if (ct.includes('text/html')) {
+      const h = new Headers(res.headers);
+      h.set('Cache-Control', 'no-store');
+      return new Response(res.body, { status: res.status, headers: h });
+    }
+    return res;
   },
 };

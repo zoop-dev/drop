@@ -694,7 +694,7 @@ document.getElementById('btn-go-public').addEventListener('click', () => {
   }
 });
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
 
 const joinCode = new URLSearchParams(location.search).get('join');
 if (joinCode) {
