@@ -63,6 +63,8 @@ const state = {
   activeRequest: null,
   decryptKeys: {},
   recvState: {},
+  fileBatch: {},
+  batchRecvState: {},
   sendQueue: [],
   lobby: null,
   lobbyId: null,
@@ -135,8 +137,13 @@ async function handleMessage(msg) {
     case 'peer-joined': addPeer(msg.peerId, msg.name); break;
     case 'peer-left': removePeer(msg.peerId); break;
     case 'transfer-request': showIncomingRequest(msg); break;
+    case 'batch-request': showIncomingRequest(msg); break;
     case 'transfer-accept': startSendingFile(msg.from, msg.fileId); break;
+    case 'batch-accept': startSendingBatch(msg.from, msg.batchId); break;
     case 'transfer-decline': markTransferStatus(msg.fileId, 'Declined', 'transfer-error'); break;
+    case 'batch-decline':
+      state.sendQueue.filter(e => e.batchId === msg.batchId).forEach(e => markTransferStatus(e.fileId, 'Declined', 'transfer-error'));
+      break;
     case 'chunk': await receiveChunk(msg); break;
     case 'transfer-error': markTransferStatus(msg.fileId, 'Transfer failed', 'transfer-error'); break;
     case 'text': await receiveText(msg); break;
@@ -247,8 +254,30 @@ function markTransferReceived(fileId, filename, blobUrl) {
   if (!el) return;
   el.querySelector('.progress-fill').style.width = '100%';
   const footer = el.querySelector('.transfer-footer');
-  footer.innerHTML = `<span class="status-text transfer-done">Ready</span><a class="download-btn" href="${blobUrl}" download="${filename}">Save file</a>`;
+  footer.innerHTML = `<span class="status-text transfer-done">Ready</span><a class="download-btn" href="${blobUrl}" download="${filename}">Save</a>`;
   footer.querySelector('.download-btn').addEventListener('click', () => setTimeout(() => URL.revokeObjectURL(blobUrl), 1000));
+
+  const batchId = state.fileBatch[fileId];
+  if (batchId && state.batchRecvState[batchId]) {
+    const bs = state.batchRecvState[batchId];
+    bs.blobs.push({ filename, blobUrl });
+    if (bs.blobs.length >= bs.total) {
+      const blobs = bs.blobs.slice();
+      delete state.batchRecvState[batchId];
+      const wrap = document.createElement('div');
+      wrap.className = 'transfer-item batch-done';
+      wrap.innerHTML = `<div class="transfer-header"><span class="transfer-name">${blobs.length} files ready</span></div><div class="transfer-footer"><span class="status-text transfer-done">All received</span><button class="download-btn" id="save-all-${batchId}">Save all</button></div>`;
+      wrap.querySelector('.download-btn').addEventListener('click', () => {
+        blobs.forEach((b, i) => setTimeout(() => {
+          const a = document.createElement('a');
+          a.href = b.blobUrl; a.download = b.filename; a.click();
+          setTimeout(() => URL.revokeObjectURL(b.blobUrl), 1000);
+        }, i * 400));
+      });
+      document.getElementById('transfers').prepend(wrap);
+    }
+  }
+  delete state.fileBatch[fileId];
 }
 
 async function queueFiles(files) {
@@ -262,31 +291,38 @@ async function queueFiles(files) {
     return;
   }
 
-  const isBatch = files.length > 1;
-  const batchId = isBatch ? crypto.randomUUID() : null;
+  if (files.length === 1) {
+    const file = files[0];
+    const fileId = crypto.randomUUID();
+    const key = await generateKey();
+    const keyB64 = await exportKey(key);
+    state.sendQueue.push({ file, fileId, key, pendingTargets: new Set(peerIds) });
+    peerIds.forEach(peerId => {
+      send({ type: 'transfer-request', to: peerId, fileId, filename: file.name, size: file.size, mimeType: file.type || 'application/octet-stream', key: keyB64 });
+      addTransferItem(fileId, file.name, file.size, 'send', state.peers[peerId]?.name ?? peerId);
+    });
+    return;
+  }
 
+  const batchId = crypto.randomUUID();
+  const batchEntries = [];
   for (const file of files) {
     const fileId = crypto.randomUUID();
     const key = await generateKey();
     const keyB64 = await exportKey(key);
-
-    state.sendQueue.push({ file, fileId, key, pendingTargets: new Set(peerIds) });
-
-    peerIds.forEach(peerId => {
-      send({
-        type: 'transfer-request',
-        to: peerId,
-        fileId,
-        filename: isBatch ? `${files.length} files (${file.name}, ...)` : file.name,
-        displayName: file.name,
-        size: file.size,
-        mimeType: file.type || 'application/octet-stream',
-        key: keyB64,
-        batchId,
-      });
-      addTransferItem(fileId, file.name, file.size, 'send', state.peers[peerId]?.name ?? peerId);
-    });
+    state.sendQueue.push({ file, fileId, key, batchId, pendingTargets: new Set(peerIds) });
+    batchEntries.push({ fileId, filename: file.name, size: file.size, mimeType: file.type || 'application/octet-stream', key: keyB64 });
   }
+  const totalSize = files.reduce((s, f) => s + f.size, 0);
+  peerIds.forEach(peerId => {
+    send({ type: 'batch-request', to: peerId, batchId, files: batchEntries, count: files.length, totalSize });
+    batchEntries.forEach(e => addTransferItem(e.fileId, e.filename, e.size, 'send', state.peers[peerId]?.name ?? peerId));
+  });
+}
+
+async function startSendingBatch(fromPeerId, batchId) {
+  const entries = state.sendQueue.filter(e => e.batchId === batchId && e.pendingTargets.has(fromPeerId));
+  for (const entry of entries) await startSendingFile(fromPeerId, entry.fileId);
 }
 
 async function startSendingFile(fromPeerId, fileId) {
@@ -352,11 +388,14 @@ function drainRequestQueue() {
   if (!msg) { document.getElementById('overlay').classList.add('hidden'); return; }
   state.activeRequest = msg;
   const queued = state.requestQueue.length;
-  const isBatch = !!msg.batchId;
   document.getElementById('req-from').textContent = state.peers[msg.from]?.name ?? msg.from;
-  document.getElementById('req-filename').textContent = isBatch ? msg.filename : msg.filename;
-  document.getElementById('req-filesize').textContent =
-    fmtSize(msg.size) + ' · AES-256-GCM encrypted' + (queued ? ` · +${queued} more` : '');
+  if (msg.type === 'batch-request') {
+    document.getElementById('req-filename').textContent = `${msg.count} files`;
+    document.getElementById('req-filesize').textContent = fmtSize(msg.totalSize) + ' total · AES-256-GCM' + (queued ? ` · +${queued} more` : '');
+  } else {
+    document.getElementById('req-filename').textContent = msg.filename;
+    document.getElementById('req-filesize').textContent = fmtSize(msg.size) + ' · AES-256-GCM encrypted' + (queued ? ` · +${queued} more` : '');
+  }
   document.getElementById('overlay').classList.remove('hidden');
 }
 
@@ -364,8 +403,20 @@ document.getElementById('btn-accept').addEventListener('click', async () => {
   const req = state.activeRequest;
   if (!req) return;
   state.activeRequest = null;
-  state.decryptKeys[req.fileId] = await importKey(req.key);
-  send({ type: 'transfer-accept', to: req.from, fileId: req.fileId });
+  if (req.type === 'batch-request') {
+    const keys = await Promise.all(req.files.map(f => importKey(f.key)));
+    const peerName = state.peers[req.from]?.name ?? req.from;
+    state.batchRecvState[req.batchId] = { total: req.files.length, blobs: [] };
+    req.files.forEach((f, i) => {
+      state.decryptKeys[f.fileId] = keys[i];
+      state.fileBatch[f.fileId] = req.batchId;
+      addTransferItem(f.fileId, f.filename, f.size, 'recv', peerName);
+    });
+    send({ type: 'batch-accept', to: req.from, batchId: req.batchId });
+  } else {
+    state.decryptKeys[req.fileId] = await importKey(req.key);
+    send({ type: 'transfer-accept', to: req.from, fileId: req.fileId });
+  }
   drainRequestQueue();
 });
 
@@ -373,7 +424,11 @@ document.getElementById('btn-decline').addEventListener('click', () => {
   const req = state.activeRequest;
   if (!req) return;
   state.activeRequest = null;
-  send({ type: 'transfer-decline', to: req.from, fileId: req.fileId });
+  if (req.type === 'batch-request') {
+    send({ type: 'batch-decline', to: req.from, batchId: req.batchId });
+  } else {
+    send({ type: 'transfer-decline', to: req.from, fileId: req.fileId });
+  }
   drainRequestQueue();
 });
 
@@ -490,7 +545,7 @@ document.getElementById('code-input').addEventListener('keydown', e => {
 
 document.getElementById('back-btn').addEventListener('click', () => {
   if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(1000); }
-  Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, sendQueue: [] });
+  Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, fileBatch: {}, batchRecvState: {}, sendQueue: [] });
   connectedResolve = null; connectedPromise = null;
   const list = document.getElementById('peers-list');
   list.innerHTML = '';

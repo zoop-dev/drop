@@ -205,6 +205,11 @@ header {
 .transfer-done { color: var(--green); }
 .transfer-error { color: var(--danger); }
 
+.batch-done {
+  border-color: rgba(0, 200, 255, 0.3);
+  background: var(--blue-dim);
+}
+
 .download-btn {
   background: var(--blue-dim);
   border: 1px solid var(--border);
