@@ -82,6 +82,87 @@ async function decompressBuffer(buffer) {
   return new Response(ds.readable).arrayBuffer();
 }
 
+function uuidToBytes(uuid) {
+  const hex = uuid.replace(/-/g, '');
+  const b = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) b[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return b;
+}
+function bytesToUuid(b) {
+  const h = Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+}
+async function encryptChunkRaw(key, buffer) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, buffer);
+  return { iv, data };
+}
+
+function sendBinaryChunk(toPeerId, fileId, index, total, iv, ciphertext, compressed, meta) {
+  const metaBytes = meta ? new TextEncoder().encode(JSON.stringify(meta)) : null;
+  const flags = (compressed ? 1 : 0) | (meta ? 2 : 0);
+  const headerSize = 53 + (metaBytes ? 2 + metaBytes.length : 0);
+  const frame = new Uint8Array(headerSize + ciphertext.byteLength);
+  const dv = new DataView(frame.buffer);
+  let o = 0;
+  frame.set(uuidToBytes(toPeerId), o); o += 16;
+  frame.set(uuidToBytes(fileId), o); o += 16;
+  dv.setUint32(o, index, false); o += 4;
+  dv.setUint32(o, total, false); o += 4;
+  frame[o] = flags; o += 1;
+  frame.set(iv, o); o += 12;
+  if (metaBytes) { dv.setUint16(o, metaBytes.length, false); o += 2; frame.set(metaBytes, o); o += metaBytes.length; }
+  frame.set(new Uint8Array(ciphertext), o);
+  if (state.ws?.readyState === WebSocket.OPEN) state.ws.send(frame.buffer);
+}
+
+async function handleBinaryMessage(buffer) {
+  if (buffer.byteLength < 53) return;
+  const bytes = new Uint8Array(buffer);
+  const dv = new DataView(buffer);
+  const from = bytesToUuid(bytes.slice(0, 16));
+  const fileId = bytesToUuid(bytes.slice(16, 32));
+  const index = dv.getUint32(32, false);
+  const total = dv.getUint32(36, false);
+  const flags = bytes[40];
+  const compressed = !!(flags & 1);
+  const isFirst = !!(flags & 2);
+  const iv = bytes.slice(41, 53);
+  let o = 53, meta = null;
+  if (isFirst) {
+    const metaLen = dv.getUint16(53, false); o = 55 + metaLen;
+    meta = JSON.parse(new TextDecoder().decode(bytes.slice(55, o)));
+  }
+  const ciphertext = buffer.slice(o);
+  if (!state.decryptKeys[fileId]) return;
+  if (isFirst && !state.recvState[fileId]) {
+    state.recvState[fileId] = { name: meta.filename, size: meta.size, mimeType: meta.mimeType, compressed, chunks: [], received: 0, total };
+    addTransferItem(fileId, meta.filename, meta.size, 'recv', state.peers[from]?.name ?? from);
+  }
+  const recv = state.recvState[fileId];
+  if (!recv) return;
+  try {
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, state.decryptKeys[fileId], ciphertext);
+    recv.chunks[index] = decrypted;
+    recv.received++;
+    updateProgress(fileId, Math.min(99, (recv.received / total) * 100), 'Receiving...');
+    if (recv.received >= total) {
+      let blob;
+      if (recv.compressed) {
+        const combined = await new Blob(recv.chunks.map(c => new Uint8Array(c))).arrayBuffer();
+        blob = new Blob([await decompressBuffer(combined)], { type: recv.mimeType });
+      } else {
+        blob = new Blob(recv.chunks.map(c => new Uint8Array(c)), { type: recv.mimeType });
+      }
+      markTransferReceived(fileId, recv.name, URL.createObjectURL(blob), recv.mimeType);
+      delete state.recvState[fileId];
+      delete state.decryptKeys[fileId];
+    }
+  } catch {
+    markTransferStatus(fileId, 'Decryption failed', 'transfer-error');
+  }
+}
+
 const state = {
   roomCode: null,
   myId: null,
@@ -134,7 +215,11 @@ function connect(code) {
   if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(); }
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   state.ws = new WebSocket(`${proto}//${location.host}/ws/${code}?name=${encodeURIComponent(state.myName)}`);
-  state.ws.onmessage = async (e) => handleMessage(JSON.parse(e.data));
+  state.ws.binaryType = 'arraybuffer';
+  state.ws.onmessage = async (e) => {
+    if (e.data instanceof ArrayBuffer) handleBinaryMessage(e.data);
+    else handleMessage(JSON.parse(e.data));
+  };
   state.ws.onerror = () => {};
   state.ws.onclose = (e) => {
     if (e.code === 1000) return;
@@ -178,7 +263,7 @@ async function handleMessage(msg) {
     case 'batch-decline':
       state.sendQueue.filter(e => e.batchId === msg.batchId).forEach(e => markTransferStatus(e.fileId, 'Declined', 'transfer-error'));
       break;
-    case 'chunk': await receiveChunk(msg); break;
+    case 'chunk': break;
     case 'transfer-error': markTransferStatus(msg.fileId, 'Transfer failed', 'transfer-error'); break;
     case 'transfer-cancel':
       delete state.decryptKeys[msg.fileId];
@@ -246,10 +331,22 @@ function renderPeers() {
   ids.forEach(id => {
     const el = document.createElement('div');
     el.className = 'peer-card';
-    const status = state.reconnecting
-      ? `<span class="peer-status reconnecting-status">Reconnecting...</span>`
-      : `<span class="peer-status"><span class="dot"></span> Connected</span>`;
-    el.innerHTML = `<span class="peer-name">${state.peers[id].name}</span>${status}`;
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'peer-name';
+    nameSpan.textContent = state.peers[id].name;
+    const statusSpan = document.createElement('span');
+    if (state.reconnecting) {
+      statusSpan.className = 'peer-status reconnecting-status';
+      statusSpan.textContent = 'Reconnecting...';
+    } else {
+      statusSpan.className = 'peer-status';
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      statusSpan.appendChild(dot);
+      statusSpan.append(' Connected');
+    }
+    el.appendChild(nameSpan);
+    el.appendChild(statusSpan);
     list.appendChild(el);
   });
   setDropEnabled(!state.reconnecting);
@@ -267,27 +364,58 @@ function addTransferItem(fileId, filename, size, direction, peerName) {
   const el = document.createElement('div');
   el.className = 'transfer-item';
   el.id = 'transfer-' + fileId;
-  el.innerHTML = `
-    <div class="transfer-header">
-      <span class="transfer-name">${filename}</span>
-      <span class="transfer-header-right">
-        <span class="transfer-size">${fmtSize(size)}</span>
-        ${direction === 'send' ? `<button class="btn-cancel-xfer" title="Cancel">✕</button>` : ''}
-      </span>
-    </div>
-    <div class="transfer-peer">${direction === 'send' ? 'Sending to' : 'From'} ${peerName}</div>
-    <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
-    <div class="transfer-footer">
-      <span class="status-text">${direction === 'send' ? 'Waiting for acceptance...' : 'Receiving...'}</span>
-      <span class="pct-text"></span>
-    </div>`;
+
+  const header = document.createElement('div');
+  header.className = 'transfer-header';
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'transfer-name';
+  nameSpan.textContent = filename;
+  const headerRight = document.createElement('span');
+  headerRight.className = 'transfer-header-right';
+  const sizeSpan = document.createElement('span');
+  sizeSpan.className = 'transfer-size';
+  sizeSpan.textContent = fmtSize(size);
+  headerRight.appendChild(sizeSpan);
   if (direction === 'send') {
-    el.querySelector('.btn-cancel-xfer').addEventListener('click', () => {
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn-cancel-xfer';
+    cancelBtn.title = 'Cancel';
+    cancelBtn.textContent = '✕';
+    cancelBtn.addEventListener('click', () => {
       state.cancelledTransfers.add(fileId);
-      el.querySelector('.btn-cancel-xfer').remove();
+      cancelBtn.remove();
       markTransferStatus(fileId, 'Cancelling...', '');
     });
+    headerRight.appendChild(cancelBtn);
   }
+  header.appendChild(nameSpan);
+  header.appendChild(headerRight);
+
+  const peerDiv = document.createElement('div');
+  peerDiv.className = 'transfer-peer';
+  peerDiv.textContent = (direction === 'send' ? 'Sending to ' : 'From ') + peerName;
+
+  const progressBar = document.createElement('div');
+  progressBar.className = 'progress-bar';
+  const fill = document.createElement('div');
+  fill.className = 'progress-fill';
+  fill.style.width = '0%';
+  progressBar.appendChild(fill);
+
+  const footer = document.createElement('div');
+  footer.className = 'transfer-footer';
+  const statusSpan = document.createElement('span');
+  statusSpan.className = 'status-text';
+  statusSpan.textContent = direction === 'send' ? 'Waiting for acceptance...' : 'Receiving...';
+  const pctSpan = document.createElement('span');
+  pctSpan.className = 'pct-text';
+  footer.appendChild(statusSpan);
+  footer.appendChild(pctSpan);
+
+  el.appendChild(header);
+  el.appendChild(peerDiv);
+  el.appendChild(progressBar);
+  el.appendChild(footer);
   document.getElementById('transfers').prepend(el);
 }
 
@@ -321,8 +449,18 @@ function markTransferReceived(fileId, filename, blobUrl, mimeType) {
     el.querySelector('.progress-bar').after(thumb);
   }
   const footer = el.querySelector('.transfer-footer');
-  footer.innerHTML = `<span class="status-text transfer-done">Ready</span><a class="download-btn" href="${blobUrl}" download="${filename}">Save</a>`;
-  if (!isImage) footer.querySelector('.download-btn').addEventListener('click', () => setTimeout(() => URL.revokeObjectURL(blobUrl), 1000));
+  footer.innerHTML = '';
+  const readySpan = document.createElement('span');
+  readySpan.className = 'status-text transfer-done';
+  readySpan.textContent = 'Ready';
+  const saveLink = document.createElement('a');
+  saveLink.className = 'download-btn';
+  saveLink.href = blobUrl;
+  saveLink.download = filename;
+  saveLink.textContent = 'Save';
+  if (!isImage) saveLink.addEventListener('click', () => setTimeout(() => URL.revokeObjectURL(blobUrl), 1000));
+  footer.appendChild(readySpan);
+  footer.appendChild(saveLink);
 
   const batchId = state.fileBatch[fileId];
   if (batchId && state.batchRecvState[batchId]) {
@@ -424,9 +562,9 @@ async function startSendingFile(fromPeerId, fileId) {
       }
       const buffer = srcBuf ? srcBuf.slice(offset, offset + CHUNK_SIZE)
                             : await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer();
-      const { iv, data } = await encryptChunk(key, buffer);
-      send({ type: 'chunk', to: fromPeerId, fileId, index, total, iv, data,
-             filename: file.name, size: file.size, mimeType, compressed });
+      const { iv, data } = await encryptChunkRaw(key, buffer);
+      const meta = index === 0 ? { filename: file.name, size: file.size, mimeType } : null;
+      sendBinaryChunk(fromPeerId, fileId, index, total, iv, data, compressed, meta);
       offset += buffer.byteLength;
       index++;
       const elapsed = (Date.now() - startTime) / 1000 || 0.001;
@@ -610,13 +748,24 @@ async function receiveText(msg) {
 function addTextItem(text, from, isMine) {
   const el = document.createElement('div');
   el.className = 'text-item';
-  el.innerHTML = `
-    <div class="text-item-meta">${isMine ? 'You' : from}</div>
-    <div class="text-item-body">${text.replace(/</g, '&lt;')}</div>
-    <div class="text-item-actions"><button class="btn-copy-text">Copy</button></div>`;
-  el.querySelector('.btn-copy-text').addEventListener('click', function() {
+  const meta = document.createElement('div');
+  meta.className = 'text-item-meta';
+  meta.textContent = isMine ? 'You' : from;
+  const body = document.createElement('div');
+  body.className = 'text-item-body';
+  body.textContent = text;
+  const actions = document.createElement('div');
+  actions.className = 'text-item-actions';
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'btn-copy-text';
+  copyBtn.textContent = 'Copy';
+  copyBtn.addEventListener('click', function() {
     navigator.clipboard.writeText(text).then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy', 1500); });
   });
+  actions.appendChild(copyBtn);
+  el.appendChild(meta);
+  el.appendChild(body);
+  el.appendChild(actions);
   document.getElementById('transfers').prepend(el);
 }
 
@@ -796,10 +945,23 @@ function renderLobbyPeers() {
     const isPending = state.pendingLobbyConnect === id;
     const el = document.createElement('div');
     el.className = 'lobby-peer-card' + (isNearby ? ' nearby' : '');
-    el.innerHTML = `
-      <span class="lobby-peer-name">${peer.nickname}${isNearby ? '<span class="nearby-badge">Nearby</span>' : ''}</span>
-      <button class="btn-connect" data-id="${id}" ${isPending ? 'disabled' : ''}>${isPending ? 'Waiting...' : 'Connect'}</button>`;
-    el.querySelector('.btn-connect').addEventListener('click', () => sendLobbyConnectRequest(id));
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'lobby-peer-name';
+    nameSpan.textContent = peer.nickname;
+    if (isNearby) {
+      const badge = document.createElement('span');
+      badge.className = 'nearby-badge';
+      badge.textContent = 'Nearby';
+      nameSpan.appendChild(badge);
+    }
+    const btn = document.createElement('button');
+    btn.className = 'btn-connect';
+    btn.dataset.id = id;
+    btn.disabled = isPending;
+    btn.textContent = isPending ? 'Waiting...' : 'Connect';
+    btn.addEventListener('click', () => sendLobbyConnectRequest(id));
+    el.appendChild(nameSpan);
+    el.appendChild(btn);
     list.appendChild(el);
   });
 }
@@ -808,9 +970,22 @@ function showNearbyToast(peerId, nickname) {
   document.querySelectorAll('.nearby-toast').forEach(t => t.remove());
   const el = document.createElement('div');
   el.className = 'nearby-toast';
-  el.innerHTML = `<span><strong>${nickname}</strong> is nearby</span><button class="nearby-toast-connect">Connect</button><button class="nearby-toast-dismiss">✕</button>`;
-  el.querySelector('.nearby-toast-connect').addEventListener('click', () => { sendLobbyConnectRequest(peerId); el.remove(); });
-  el.querySelector('.nearby-toast-dismiss').addEventListener('click', () => el.remove());
+  const msg = document.createElement('span');
+  const strong = document.createElement('strong');
+  strong.textContent = nickname;
+  msg.appendChild(strong);
+  msg.append(' is nearby');
+  const connectBtn = document.createElement('button');
+  connectBtn.className = 'nearby-toast-connect';
+  connectBtn.textContent = 'Connect';
+  connectBtn.addEventListener('click', () => { sendLobbyConnectRequest(peerId); el.remove(); });
+  const dismissBtn = document.createElement('button');
+  dismissBtn.className = 'nearby-toast-dismiss';
+  dismissBtn.textContent = '✕';
+  dismissBtn.addEventListener('click', () => el.remove());
+  el.appendChild(msg);
+  el.appendChild(connectBtn);
+  el.appendChild(dismissBtn);
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 12000);
 }

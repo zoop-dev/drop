@@ -37,10 +37,22 @@ export class TransferRoom extends DurableObject<Env> {
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    if (typeof message !== "string") return;
+    const [senderId] = this.ctx.getTags(ws);
+    if (message instanceof ArrayBuffer) {
+      if (message.byteLength < 16) return;
+      const toId = bytesToUuid(new Uint8Array(message, 0, 16));
+      const targets = this.ctx.getWebSockets(toId);
+      if (!targets.length) return;
+      const fromBytes = uuidToBytes(senderId);
+      const rest = new Uint8Array(message, 16);
+      const forwarded = new Uint8Array(16 + rest.byteLength);
+      forwarded.set(fromBytes, 0);
+      forwarded.set(rest, 16);
+      targets[0].send(forwarded.buffer);
+      return;
+    }
     let data: Record<string, unknown>;
     try { data = JSON.parse(message); } catch { return; }
-    const [senderId] = this.ctx.getTags(ws);
     if (typeof data.to === "string") {
       for (const t of this.ctx.getWebSockets(data.to)) {
         t.send(JSON.stringify({ ...data, from: senderId }));
@@ -118,6 +130,17 @@ export class LobbyRoom extends DurableObject<Env> {
       if (peer !== ws) peer.send(JSON.stringify({ type: "lobby-peer-left", peerId }));
     }
   }
+}
+
+function uuidToBytes(uuid: string): Uint8Array {
+  const hex = uuid.replace(/-/g, '');
+  const b = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) b[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return b;
+}
+function bytesToUuid(b: Uint8Array): string {
+  const h = Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
 }
 
 function generateCode(): string {
