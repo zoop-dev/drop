@@ -4,6 +4,7 @@ export interface Env {
   ASSETS: Fetcher;
   ROOMS: DurableObjectNamespace<TransferRoom>;
   LOBBY: DurableObjectNamespace<LobbyRoom>;
+  DB: D1Database;
 }
 
 export class TransferRoom extends DurableObject<Env> {
@@ -125,12 +126,40 @@ function generateCode(): string {
   return Array.from(bytes).map((b) => chars[b % chars.length]).join("");
 }
 
+function generateShareId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(9));
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/room" && request.method === "POST") {
       return Response.json({ code: generateCode() });
+    }
+
+    if (url.pathname === "/api/share" && request.method === "POST") {
+      const { data, iv, mime, filename, size } = await request.json() as Record<string, string>;
+      if (!data || !iv || !mime) return new Response("Bad request", { status: 400 });
+      if (data.length > 8_000_000) return new Response("Too large", { status: 413 });
+      const id = generateShareId();
+      const now = Date.now();
+      await env.DB.prepare(
+        "INSERT INTO shares (id, data, iv, mime, filename, size, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      ).bind(id, data, iv, mime, filename ?? null, size ? parseInt(size) : null, now, now + 86_400_000).run();
+      await env.DB.prepare("DELETE FROM shares WHERE expires_at < ?").bind(now).run();
+      return Response.json({ id });
+    }
+
+    const shareGetMatch = url.pathname.match(/^\/api\/share\/([A-Za-z0-9_-]{10,16})$/);
+    if (shareGetMatch) {
+      const row = await env.DB.prepare(
+        "SELECT data, iv, mime, filename, size FROM shares WHERE id = ? AND expires_at > ?"
+      ).bind(shareGetMatch[1], Date.now()).first();
+      if (!row) return new Response("Not found or expired", { status: 404 });
+      await env.DB.prepare("DELETE FROM shares WHERE id = ?").bind(shareGetMatch[1]).run();
+      return Response.json(row);
     }
 
     if (url.pathname === "/api/qr") {
@@ -157,6 +186,14 @@ export default {
 
     if (url.pathname === '/share-target' && request.method === 'POST') {
       return Response.redirect('/?incoming=share', 303);
+    }
+
+    if (/^\/share\/[A-Za-z0-9_-]{10,16}$/.test(url.pathname)) {
+      const rootReq = new Request(new URL('/', request.url).toString());
+      const res = await env.ASSETS.fetch(rootReq);
+      const h = new Headers(res.headers);
+      h.set('Cache-Control', 'no-store');
+      return new Response(res.body, { status: res.status, headers: h });
     }
 
     if (/^\/room\/[A-Z0-9]{6}$/i.test(url.pathname)) {

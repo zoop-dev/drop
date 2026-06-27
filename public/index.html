@@ -14,7 +14,7 @@
 <header>
   <span class="logo">drop</span>
   <div class="header-right">
-    <span class="version-badge">v16</span>
+    <span class="version-badge">v17</span>
     <button class="back-btn hidden" id="back-btn">leave room</button>
   </div>
 </header>
@@ -34,6 +34,8 @@
 
     <div class="lobby-bar">
       <button class="btn-public" id="btn-go-public">Go public</button>
+      <button class="btn-share-link" id="btn-create-share">Share a file link</button>
+      <input type="file" id="share-file-input" style="display:none">
     </div>
 
     <div id="lobby-section" class="hidden">
@@ -68,8 +70,11 @@
         <div class="no-peers" id="no-peers">Waiting for others to join...</div>
       </div>
       <label class="auto-accept-row" id="auto-accept-row">
-        <input type="checkbox" id="auto-accept-toggle">
         <span class="auto-accept-label">Auto-accept from connected devices</span>
+        <span class="toggle-track" id="toggle-track">
+          <input type="checkbox" id="auto-accept-toggle" class="toggle-input">
+          <span class="toggle-thumb"></span>
+        </span>
       </label>
     </div>
 
@@ -86,6 +91,16 @@
     </div>
 
     <div class="transfers" id="transfers"></div>
+  </div>
+
+  <div class="view" id="view-share">
+    <div class="share-receive-card" id="share-receive-card">
+      <div class="share-receive-icon">&#8659;</div>
+      <div class="share-receive-name" id="share-receive-name">Loading...</div>
+      <div class="share-receive-meta" id="share-receive-meta"></div>
+      <div class="share-receive-note">This link can only be opened once</div>
+      <button class="btn btn-primary" id="btn-share-download">Download</button>
+    </div>
   </div>
 </main>
 
@@ -108,6 +123,20 @@
     <div class="request-actions">
       <button class="btn-accept" id="lobby-btn-accept">Accept</button>
       <button class="btn-decline" id="lobby-btn-decline">Decline</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="share-create-overlay">
+  <div class="request-card">
+    <div class="request-from" id="share-upload-status">Encrypting...</div>
+    <div class="request-filename" id="share-upload-filename"></div>
+    <div class="share-link-box hidden" id="share-link-box">
+      <input class="share-link-input" id="share-link-input" readonly>
+      <button class="btn-copy-share" id="btn-copy-share">Copy</button>
+    </div>
+    <div class="request-actions">
+      <button class="btn-decline" id="btn-share-close">Close</button>
     </div>
   </div>
 </div>

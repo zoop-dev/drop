@@ -919,10 +919,121 @@ document.getElementById('qr-fullscreen').addEventListener('click', async () => {
   try { await wakeLock?.release(); wakeLock = null; } catch {}
 });
 
+async function createShareLink(file) {
+  const MAX = 5 * 1024 * 1024;
+  if (file.size > MAX) {
+    alert('Share links are limited to 5 MB. Use a room for larger files.');
+    return;
+  }
+  const overlay = document.getElementById('share-create-overlay');
+  const statusEl = document.getElementById('share-upload-status');
+  const filenameEl = document.getElementById('share-upload-filename');
+  const linkBox = document.getElementById('share-link-box');
+  const linkInput = document.getElementById('share-link-input');
+  overlay.classList.remove('hidden');
+  linkBox.classList.add('hidden');
+  filenameEl.textContent = file.name;
+  statusEl.textContent = 'Encrypting...';
+
+  try {
+    const key = await generateKey();
+    const keyB64 = await exportKey(key);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, await file.arrayBuffer());
+    statusEl.textContent = 'Uploading...';
+    const res = await fetch('/api/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data: toB64(encrypted),
+        iv: toB64(iv),
+        mime: file.type || 'application/octet-stream',
+        filename: file.name,
+        size: String(file.size),
+      }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const { id } = await res.json();
+    const url = `${location.origin}/share/${id}#key=${encodeURIComponent(keyB64)}`;
+    linkInput.value = url;
+    statusEl.textContent = 'Link ready — one-time use, expires in 24h';
+    linkBox.classList.remove('hidden');
+  } catch (err) {
+    statusEl.textContent = 'Failed: ' + err.message;
+  }
+}
+
+document.getElementById('btn-create-share').addEventListener('click', () => {
+  document.getElementById('share-file-input').click();
+});
+document.getElementById('share-file-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) createShareLink(file);
+  e.target.value = '';
+});
+document.getElementById('btn-copy-share').addEventListener('click', () => {
+  const input = document.getElementById('share-link-input');
+  navigator.clipboard.writeText(input.value).then(() => {
+    document.getElementById('btn-copy-share').textContent = 'Copied!';
+    setTimeout(() => { document.getElementById('btn-copy-share').textContent = 'Copy'; }, 2000);
+  });
+});
+document.getElementById('btn-share-close').addEventListener('click', () => {
+  document.getElementById('share-create-overlay').classList.add('hidden');
+});
+
+async function receiveShareLink(id, keyB64) {
+  showView('share');
+  history.replaceState({}, '', location.pathname);
+  const nameEl = document.getElementById('share-receive-name');
+  const metaEl = document.getElementById('share-receive-meta');
+  const btn = document.getElementById('btn-share-download');
+  nameEl.textContent = 'Fetching...';
+  metaEl.textContent = '';
+  btn.disabled = true;
+
+  let payload;
+  try {
+    const res = await fetch(`/api/share/${id}`);
+    if (!res.ok) {
+      nameEl.textContent = res.status === 404 ? 'Link not found or already used' : 'Error fetching link';
+      return;
+    }
+    payload = await res.json();
+  } catch {
+    nameEl.textContent = 'Network error';
+    return;
+  }
+
+  nameEl.textContent = payload.filename || 'file';
+  metaEl.textContent = payload.size ? fmtSize(payload.size) + ' · AES-256-GCM' : 'AES-256-GCM encrypted';
+  btn.disabled = false;
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = 'Decrypting...';
+    try {
+      const key = await importKey(keyB64);
+      const decrypted = await decryptChunk(key, payload.iv, payload.data);
+      const blob = new Blob([decrypted], { type: payload.mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = payload.filename || 'file'; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      btn.textContent = 'Downloaded';
+      document.getElementById('share-receive-note').textContent = 'File removed from servers.';
+    } catch {
+      btn.textContent = 'Decryption failed';
+      btn.disabled = false;
+    }
+  }, { once: true });
+}
+
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
 
 const joinCode = new URLSearchParams(location.search).get('join');
 const roomPathMatch = location.pathname.match(/^\/room\/([A-Z0-9]{6})$/i);
+const sharePathMatch = location.pathname.match(/^\/share\/([A-Za-z0-9_-]{10,16})$/);
 if (joinCode) {
   history.replaceState({}, '', '/');
   enterRoom(joinCode, false);
@@ -931,6 +1042,13 @@ if (joinCode) {
   const wasCreator = sessionStorage.getItem('drop-creator') === '1';
   const code = roomPathMatch[1].toUpperCase();
   enterRoom(code, savedCode === code && wasCreator);
+} else if (sharePathMatch) {
+  const keyB64 = decodeURIComponent(location.hash.replace('#key=', ''));
+  if (keyB64) receiveShareLink(sharePathMatch[1], keyB64);
+  else {
+    showView('share');
+    document.getElementById('share-receive-name').textContent = 'Invalid link — missing key';
+  }
 }
 
 if (new URLSearchParams(location.search).get('incoming') === 'share') {
