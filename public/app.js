@@ -51,6 +51,37 @@ async function decryptChunk(key, ivB64, dataB64) {
 const CHUNK_SIZE = 49152;
 const SAVED_NICKNAME_KEY = 'drop-nickname';
 
+function fmtSpeed(bps) {
+  if (bps < 1024) return bps.toFixed(0) + ' B/s';
+  if (bps < 1048576) return (bps / 1024).toFixed(1) + ' KB/s';
+  return (bps / 1048576).toFixed(1) + ' MB/s';
+}
+function fmtETA(secs) {
+  if (secs < 60) return Math.ceil(secs) + 's';
+  return Math.floor(secs / 60) + 'm ' + Math.ceil(secs % 60) + 's';
+}
+function isCompressible(mimeType, size) {
+  if (size > 50 * 1024 * 1024) return false;
+  const t = mimeType || '';
+  if (t.startsWith('image/') || t.startsWith('video/') || t.startsWith('audio/')) return false;
+  if (/zip|rar|7z|gz|bz2|xz|zst|br|lzma/.test(t)) return false;
+  return true;
+}
+async function compressBuffer(buffer) {
+  const cs = new CompressionStream('gzip');
+  const w = cs.writable.getWriter();
+  await w.write(new Uint8Array(buffer));
+  await w.close();
+  return new Response(cs.readable).arrayBuffer();
+}
+async function decompressBuffer(buffer) {
+  const ds = new DecompressionStream('gzip');
+  const w = ds.writable.getWriter();
+  await w.write(new Uint8Array(buffer));
+  await w.close();
+  return new Response(ds.readable).arrayBuffer();
+}
+
 const state = {
   roomCode: null,
   myId: null,
@@ -72,6 +103,7 @@ const state = {
   lobbyPeers: {},
   pendingLobbyConnect: null,
   pendingShareFiles: null,
+  cancelledTransfers: new Set(),
 };
 
 function showView(id) {
@@ -148,6 +180,12 @@ async function handleMessage(msg) {
       break;
     case 'chunk': await receiveChunk(msg); break;
     case 'transfer-error': markTransferStatus(msg.fileId, 'Transfer failed', 'transfer-error'); break;
+    case 'transfer-cancel':
+      delete state.decryptKeys[msg.fileId];
+      delete state.recvState[msg.fileId];
+      delete state.fileBatch[msg.fileId];
+      markTransferStatus(msg.fileId, 'Cancelled', '');
+      break;
     case 'text': await receiveText(msg); break;
   }
 }
@@ -232,7 +270,10 @@ function addTransferItem(fileId, filename, size, direction, peerName) {
   el.innerHTML = `
     <div class="transfer-header">
       <span class="transfer-name">${filename}</span>
-      <span class="transfer-size">${fmtSize(size)}</span>
+      <span class="transfer-header-right">
+        <span class="transfer-size">${fmtSize(size)}</span>
+        ${direction === 'send' ? `<button class="btn-cancel-xfer" title="Cancel">✕</button>` : ''}
+      </span>
     </div>
     <div class="transfer-peer">${direction === 'send' ? 'Sending to' : 'From'} ${peerName}</div>
     <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
@@ -240,6 +281,13 @@ function addTransferItem(fileId, filename, size, direction, peerName) {
       <span class="status-text">${direction === 'send' ? 'Waiting for acceptance...' : 'Receiving...'}</span>
       <span class="pct-text"></span>
     </div>`;
+  if (direction === 'send') {
+    el.querySelector('.btn-cancel-xfer').addEventListener('click', () => {
+      state.cancelledTransfers.add(fileId);
+      el.querySelector('.btn-cancel-xfer').remove();
+      markTransferStatus(fileId, 'Cancelling...', '');
+    });
+  }
   document.getElementById('transfers').prepend(el);
 }
 
@@ -260,13 +308,21 @@ function markTransferStatus(fileId, label, cls) {
   el.querySelector('.pct-text').textContent = '';
 }
 
-function markTransferReceived(fileId, filename, blobUrl) {
+function markTransferReceived(fileId, filename, blobUrl, mimeType) {
   const el = document.getElementById('transfer-' + fileId);
   if (!el) return;
   el.querySelector('.progress-fill').style.width = '100%';
+  const isImage = mimeType?.startsWith('image/');
+  if (isImage) {
+    const thumb = document.createElement('img');
+    thumb.className = 'transfer-thumb';
+    thumb.src = blobUrl;
+    thumb.alt = filename;
+    el.querySelector('.progress-bar').after(thumb);
+  }
   const footer = el.querySelector('.transfer-footer');
   footer.innerHTML = `<span class="status-text transfer-done">Ready</span><a class="download-btn" href="${blobUrl}" download="${filename}">Save</a>`;
-  footer.querySelector('.download-btn').addEventListener('click', () => setTimeout(() => URL.revokeObjectURL(blobUrl), 1000));
+  if (!isImage) footer.querySelector('.download-btn').addEventListener('click', () => setTimeout(() => URL.revokeObjectURL(blobUrl), 1000));
 
   const batchId = state.fileBatch[fileId];
   if (batchId && state.batchRecvState[batchId]) {
@@ -345,17 +401,39 @@ async function startSendingFile(fromPeerId, fileId) {
   updateProgress(fileId, 0, 'Sending...');
 
   const { file, key } = entry;
-  const total = Math.ceil(file.size / CHUNK_SIZE);
+  const mimeType = file.type || 'application/octet-stream';
+
+  let srcBuf = null;
+  let compressed = false;
+  if (isCompressible(mimeType, file.size)) {
+    try { srcBuf = await compressBuffer(await file.arrayBuffer()); compressed = true; } catch {}
+  }
+
+  const totalBytes = srcBuf ? srcBuf.byteLength : file.size;
+  const total = Math.ceil(totalBytes / CHUNK_SIZE);
   let offset = 0, index = 0;
+  const startTime = Date.now();
 
   try {
-    while (offset < file.size) {
-      const buffer = await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer();
+    while (offset < totalBytes) {
+      if (state.cancelledTransfers.has(fileId)) {
+        state.cancelledTransfers.delete(fileId);
+        send({ type: 'transfer-cancel', to: fromPeerId, fileId });
+        markTransferStatus(fileId, 'Cancelled', '');
+        return;
+      }
+      const buffer = srcBuf ? srcBuf.slice(offset, offset + CHUNK_SIZE)
+                            : await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer();
       const { iv, data } = await encryptChunk(key, buffer);
-      send({ type: 'chunk', to: fromPeerId, fileId, index, total, iv, data, filename: file.name, size: file.size, mimeType: file.type || 'application/octet-stream' });
+      send({ type: 'chunk', to: fromPeerId, fileId, index, total, iv, data,
+             filename: file.name, size: file.size, mimeType, compressed });
       offset += buffer.byteLength;
       index++;
-      updateProgress(fileId, Math.min(99, (offset / file.size) * 100), 'Sending...');
+      const elapsed = (Date.now() - startTime) / 1000 || 0.001;
+      const speed = offset / elapsed;
+      const eta = (totalBytes - offset) / speed;
+      updateProgress(fileId, Math.min(99, (offset / totalBytes) * 100),
+        fmtSpeed(speed) + (eta > 1 ? ` · ${fmtETA(eta)}` : ''));
       await new Promise(r => setTimeout(r, 0));
     }
     send({ type: 'transfer-complete', to: fromPeerId, fileId });
@@ -367,11 +445,11 @@ async function startSendingFile(fromPeerId, fileId) {
 }
 
 async function receiveChunk(msg) {
-  const { fileId, index, total, iv, data, filename, size, mimeType, from } = msg;
+  const { fileId, index, total, iv, data, filename, size, mimeType, compressed, from } = msg;
   if (!state.decryptKeys[fileId]) return;
 
   if (!state.recvState[fileId]) {
-    state.recvState[fileId] = { name: filename, size, mimeType, chunks: [], received: 0, total };
+    state.recvState[fileId] = { name: filename, size, mimeType, compressed: !!compressed, chunks: [], received: 0, total };
     addTransferItem(fileId, filename, size, 'recv', state.peers[from]?.name ?? from);
   }
 
@@ -382,7 +460,14 @@ async function receiveChunk(msg) {
     recv.received++;
     updateProgress(fileId, Math.min(99, (recv.received / total) * 100), 'Receiving...');
     if (recv.received >= total) {
-      markTransferReceived(fileId, recv.name, URL.createObjectURL(new Blob(recv.chunks, { type: recv.mimeType })));
+      let blob;
+      if (recv.compressed) {
+        const combined = await new Blob(recv.chunks).arrayBuffer();
+        blob = new Blob([await decompressBuffer(combined)], { type: recv.mimeType });
+      } else {
+        blob = new Blob(recv.chunks, { type: recv.mimeType });
+      }
+      markTransferReceived(fileId, recv.name, URL.createObjectURL(blob), recv.mimeType);
       delete state.recvState[fileId];
       delete state.decryptKeys[fileId];
     }
@@ -558,7 +643,7 @@ document.getElementById('code-input').addEventListener('keydown', e => {
 
 document.getElementById('back-btn').addEventListener('click', () => {
   if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(1000); }
-  Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, fileBatch: {}, batchRecvState: {}, sendQueue: [] });
+  Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, fileBatch: {}, batchRecvState: {}, sendQueue: [], cancelledTransfers: new Set() });
   connectedResolve = null; connectedPromise = null;
   const list = document.getElementById('peers-list');
   list.innerHTML = '';
@@ -746,6 +831,44 @@ document.getElementById('btn-go-public').addEventListener('click', async () => {
     nicknameInput.disabled = true;
   }
 });
+
+let scanStream = null, scanInterval = null;
+
+async function startQRScan() {
+  if (!('BarcodeDetector' in window)) {
+    const code = prompt('QR scanning not supported — enter room code:');
+    if (code?.trim().length === 6) enterRoom(code.trim().toUpperCase(), false);
+    return;
+  }
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  } catch { return; }
+  const video = document.getElementById('scan-video');
+  video.srcObject = scanStream;
+  document.getElementById('scan-overlay').classList.remove('hidden');
+  const detector = new BarcodeDetector({ formats: ['qr_code'] });
+  scanInterval = setInterval(async () => {
+    if (video.readyState < 2) return;
+    try {
+      const codes = await detector.detect(video);
+      for (const c of codes) {
+        const urlM = c.rawValue.match(/[?&]join=([A-Z0-9]{6})/i);
+        const rawM = c.rawValue.match(/^[A-Z0-9]{6}$/i);
+        const code = urlM?.[1] ?? (rawM ? c.rawValue : null);
+        if (code) { stopQRScan(); enterRoom(code.toUpperCase(), false); return; }
+      }
+    } catch {}
+  }, 200);
+}
+
+function stopQRScan() {
+  clearInterval(scanInterval); scanInterval = null;
+  scanStream?.getTracks().forEach(t => t.stop()); scanStream = null;
+  document.getElementById('scan-overlay').classList.add('hidden');
+}
+
+document.getElementById('btn-scan-qr').addEventListener('click', startQRScan);
+document.getElementById('btn-scan-close').addEventListener('click', stopQRScan);
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
 

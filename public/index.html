@@ -14,7 +14,7 @@
 <header>
   <span class="logo">drop</span>
   <div class="header-right">
-    <span class="version-badge">v12</span>
+    <span class="version-badge">v13</span>
     <button class="back-btn hidden" id="back-btn">leave room</button>
   </div>
 </header>
@@ -47,7 +47,10 @@
   <div class="view" id="view-join">
     <div class="join-wrapper">
       <input class="code-input" id="code-input" maxlength="6" placeholder="XXXXXX" autocomplete="off" spellcheck="false">
-      <button class="btn btn-primary" id="btn-join">Join</button>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-join">Join</button>
+        <button class="btn btn-secondary" id="btn-scan-qr">Scan QR</button>
+      </div>
     </div>
   </div>
 
@@ -103,6 +106,12 @@
       <button class="btn-decline" id="lobby-btn-decline">Decline</button>
     </div>
   </div>
+</div>
+
+<div class="scan-overlay hidden" id="scan-overlay">
+  <video id="scan-video" autoplay playsinline muted></video>
+  <div class="scan-aim"></div>
+  <button class="btn-scan-close" id="btn-scan-close">Cancel</button>
 </div>
 
 <script src="/app.js"></script>
