@@ -1,5 +1,5 @@
-const CACHE = 'drop-v1';
-const PRECACHE = ['/', '/style.css', '/app.js', '/manifest.json', '/icon.svg'];
+const CACHE = 'drop-v2';
+const PRECACHE = ['/', '/style.css', '/app.js', '/manifest.json', '/favicon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)));

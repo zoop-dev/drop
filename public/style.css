@@ -52,11 +52,9 @@ header {
 .main { width: 100%; max-width: 480px; }
 
 /* Home */
-.home-title { font-size: 42px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.1; margin-bottom: 10px; }
-.home-sub { color: var(--muted); font-size: 15px; margin-bottom: 36px; line-height: 1.5; }
-.home-sub span { color: var(--blue); }
+.home-title { font-size: 42px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.1; margin-bottom: 28px; }
 
-.btn-row { display: flex; gap: 12px; }
+.btn-row { display: flex; gap: 12px; margin-bottom: 12px; }
 
 .btn {
   flex: 1;
@@ -250,16 +248,12 @@ header {
 
 .hidden { display: none !important; }
 
-.lobby-bar {
-  display: flex;
-  gap: 10px;
-  margin-top: 28px;
+.nickname-row {
   margin-bottom: 16px;
-  align-items: center;
 }
 
 .nickname-input {
-  flex: 1;
+  width: 100%;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -269,10 +263,13 @@ header {
   padding: 11px 14px;
   outline: none;
   transition: border-color 0.2s;
-  min-width: 0;
 }
 .nickname-input:focus { border-color: var(--blue); }
 .nickname-input::placeholder { color: var(--muted); font-weight: 400; }
+
+.lobby-bar {
+  margin-bottom: 16px;
+}
 
 .btn-public {
   background: var(--blue-dim);
@@ -285,6 +282,7 @@ header {
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.18s;
+  width: 100%;
 }
 .btn-public:hover { background: var(--blue-glow); }
 .btn-public.active {

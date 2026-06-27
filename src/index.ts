@@ -132,15 +132,15 @@ export default {
       return Response.json({ code: generateCode() });
     }
 
+    if (url.pathname === "/ws/lobby") {
+      const id = env.LOBBY.idFromName("global");
+      return env.LOBBY.get(id).fetch(request);
+    }
+
     if (url.pathname.startsWith("/ws/")) {
       const code = url.pathname.slice(4).split("?")[0].toUpperCase();
       if (!code) return new Response("Bad request", { status: 400 });
       return env.ROOMS.getByName(code).fetch(request);
-    }
-
-    if (url.pathname === "/ws/lobby") {
-      const id = env.LOBBY.idFromName("global");
-      return env.LOBBY.get(id).fetch(request);
     }
 
     return env.ASSETS.fetch(request);

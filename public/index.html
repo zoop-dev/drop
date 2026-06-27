@@ -7,8 +7,8 @@
 <link rel="stylesheet" href="/style.css">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#00c8ff">
-<link rel="apple-touch-icon" href="/icon.svg">
-<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/favicon.svg">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 </head>
 <body>
 <header>
@@ -19,14 +19,17 @@
 <main class="main">
   <div class="view active" id="view-home">
     <div class="home-title">send anything,<br>anywhere.</div>
-    <div class="home-sub">Encrypted file transfer between devices. <span>No account. No tracking.</span></div>
+
+    <div class="nickname-row">
+      <input class="nickname-input" id="nickname-input" placeholder="your nickname (required)" maxlength="24" autocomplete="off" spellcheck="false">
+    </div>
+
     <div class="btn-row">
       <button class="btn btn-primary" id="btn-create">Create room</button>
       <button class="btn btn-secondary" id="btn-join-show">Join room</button>
     </div>
 
     <div class="lobby-bar">
-      <input class="nickname-input" id="nickname-input" placeholder="pick a nickname" maxlength="24" autocomplete="off" spellcheck="false">
       <button class="btn-public" id="btn-go-public">Go public</button>
     </div>
 
@@ -67,7 +70,7 @@
       <input type="file" id="file-input" multiple>
     </div>
 
-    <div class="text-send-bar">
+    <div class="text-send-bar" id="text-send-bar">
       <input class="text-input" id="text-input" placeholder="Send a message or text snippet..." autocomplete="off">
       <button class="btn-send-text" id="btn-send-text">Send</button>
     </div>

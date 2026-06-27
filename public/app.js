@@ -121,9 +121,12 @@ async function handleMessage(msg) {
     case 'transfer-decline': markTransferStatus(msg.fileId, 'Declined', 'transfer-error'); break;
     case 'chunk': await receiveChunk(msg); break;
     case 'transfer-error': markTransferStatus(msg.fileId, 'Transfer failed', 'transfer-error'); break;
-    case 'text': receiveText(msg); break;
+    case 'text': await receiveText(msg); break;
   }
 }
+
+const noPeersEl = document.getElementById('no-peers');
+const noLobbyPeersEl = document.getElementById('no-lobby-peers');
 
 function addPeer(id, name) { state.peers[id] = { name }; renderPeers(); }
 
@@ -152,17 +155,13 @@ function cancelPendingTransfers() {
 
 function renderPeers() {
   const list = document.getElementById('peers-list');
-  const noPeers = document.getElementById('no-peers');
   const ids = Object.keys(state.peers);
+  list.innerHTML = '';
   if (ids.length === 0) {
-    list.innerHTML = '';
-    list.appendChild(noPeers);
-    noPeers.style.display = '';
+    list.appendChild(noPeersEl);
     setDropEnabled(false);
     return;
   }
-  noPeers.style.display = 'none';
-  list.innerHTML = '';
   ids.forEach(id => {
     const el = document.createElement('div');
     el.className = 'peer-card';
@@ -350,6 +349,8 @@ document.getElementById('btn-decline').addEventListener('click', () => {
 });
 
 async function enterRoom(code, isCreator, showCode = true) {
+  const nick = nicknameInput.value.trim();
+  if (nick) state.myName = nick;
   state.roomCode = code.toUpperCase();
   state.isCreator = isCreator;
   connect(state.roomCode);
@@ -371,13 +372,24 @@ async function enterRoom(code, isCreator, showCode = true) {
   }
 }
 
-function sendText(text) {
-  Object.keys(state.peers).forEach(peerId => send({ type: 'text', to: peerId, text }));
+async function sendText(text) {
+  const key = await generateKey();
+  const keyB64 = await exportKey(key);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text));
+  const payload = { type: 'text', key: keyB64, iv: toB64(iv), data: toB64(encrypted) };
+  Object.keys(state.peers).forEach(peerId => send({ ...payload, to: peerId }));
   addTextItem(text, 'You', true);
 }
 
-function receiveText(msg) {
-  addTextItem(msg.text, state.peers[msg.from]?.name ?? msg.from, false);
+async function receiveText(msg) {
+  try {
+    const key = await importKey(msg.key);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(msg.iv) }, key, fromB64(msg.data));
+    addTextItem(new TextDecoder().decode(plain), state.peers[msg.from]?.name ?? msg.from, false);
+  } catch {
+    addTextItem('[decryption failed]', state.peers[msg.from]?.name ?? msg.from, false);
+  }
 }
 
 function addTextItem(text, from, isMine) {
@@ -394,11 +406,11 @@ function addTextItem(text, from, isMine) {
 }
 
 const textInput = document.getElementById('text-input');
-document.getElementById('btn-send-text').addEventListener('click', () => {
+document.getElementById('btn-send-text').addEventListener('click', async () => {
   const text = textInput.value.trim();
   if (!text || !Object.keys(state.peers).length) return;
-  sendText(text);
   textInput.value = '';
+  await sendText(text);
 });
 textInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('btn-send-text').click(); }
@@ -419,11 +431,26 @@ fileInput.addEventListener('change', () => {
   fileInput.value = '';
 });
 
+function requireNick() {
+  const nick = nicknameInput.value.trim();
+  if (!nick) {
+    nicknameInput.focus();
+    nicknameInput.style.borderColor = 'var(--danger)';
+    setTimeout(() => { nicknameInput.style.borderColor = ''; }, 1200);
+    return false;
+  }
+  return true;
+}
+
 document.getElementById('btn-create').addEventListener('click', async () => {
+  if (!requireNick()) return;
   const { code } = await fetch('/api/room', { method: 'POST' }).then(r => r.json());
   await enterRoom(code, true);
 });
-document.getElementById('btn-join-show').addEventListener('click', () => showView('join'));
+document.getElementById('btn-join-show').addEventListener('click', () => {
+  if (!requireNick()) return;
+  showView('join');
+});
 document.getElementById('btn-join').addEventListener('click', () => {
   const code = document.getElementById('code-input').value.trim().toUpperCase();
   if (code.length === 6) enterRoom(code, false);
@@ -436,13 +463,13 @@ document.getElementById('back-btn').addEventListener('click', () => {
   if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(1000); }
   Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, sendQueue: [] });
   const list = document.getElementById('peers-list');
-  const noPeers = document.getElementById('no-peers');
   list.innerHTML = '';
-  list.appendChild(noPeers);
-  noPeers.style.display = '';
+  list.appendChild(noPeersEl);
   document.getElementById('room-code-section').style.display = 'none';
   document.getElementById('transfers').innerHTML = '';
   document.getElementById('code-input').value = '';
+  document.getElementById('overlay').classList.add('hidden');
+  document.getElementById('lobby-overlay').classList.add('hidden');
   setDropEnabled(false);
   showView('home');
 });
@@ -514,15 +541,12 @@ function handleLobbyMessage(msg) {
 
 function renderLobbyPeers() {
   const list = document.getElementById('lobby-list');
-  const noPeers = document.getElementById('no-lobby-peers');
   const ids = Object.keys(state.lobbyPeers);
+  list.innerHTML = '';
   if (ids.length === 0) {
-    list.innerHTML = '';
-    list.appendChild(noPeers);
+    list.appendChild(noLobbyPeersEl);
     return;
   }
-  noPeers.remove();
-  list.innerHTML = '';
   ids.forEach(id => {
     const el = document.createElement('div');
     el.className = 'lobby-peer-card';
