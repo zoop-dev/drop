@@ -119,6 +119,7 @@ async function handleMessage(msg) {
     case 'transfer-decline': markTransferStatus(msg.fileId, 'Declined', 'transfer-error'); break;
     case 'chunk': await receiveChunk(msg); break;
     case 'transfer-error': markTransferStatus(msg.fileId, 'Transfer failed', 'transfer-error'); break;
+    case 'text': receiveText(msg); break;
   }
 }
 
@@ -152,6 +153,7 @@ function setDropEnabled(enabled) {
   dz.classList.toggle('disabled', !enabled);
   dz.classList.toggle('has-peers', enabled);
   document.getElementById('drop-sub').textContent = enabled ? 'or click to browse' : 'Connect a device first';
+  document.getElementById('text-send-bar').classList.toggle('disabled', !enabled);
 }
 
 function addTransferItem(fileId, filename, size, direction, peerName) {
@@ -338,6 +340,39 @@ async function enterRoom(code, isCreator) {
     });
   }
 }
+
+function sendText(text) {
+  Object.keys(state.peers).forEach(peerId => send({ type: 'text', to: peerId, text }));
+  addTextItem(text, 'You', true);
+}
+
+function receiveText(msg) {
+  addTextItem(msg.text, state.peers[msg.from]?.name ?? msg.from, false);
+}
+
+function addTextItem(text, from, isMine) {
+  const el = document.createElement('div');
+  el.className = 'text-item';
+  el.innerHTML = `
+    <div class="text-item-meta">${isMine ? 'You' : from}</div>
+    <div class="text-item-body">${text.replace(/</g, '&lt;')}</div>
+    <div class="text-item-actions"><button class="btn-copy-text">Copy</button></div>`;
+  el.querySelector('.btn-copy-text').addEventListener('click', function() {
+    navigator.clipboard.writeText(text).then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy', 1500); });
+  });
+  document.getElementById('transfers').prepend(el);
+}
+
+const textInput = document.getElementById('text-input');
+document.getElementById('btn-send-text').addEventListener('click', () => {
+  const text = textInput.value.trim();
+  if (!text || !Object.keys(state.peers).length) return;
+  sendText(text);
+  textInput.value = '';
+});
+textInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('btn-send-text').click(); }
+});
 
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
