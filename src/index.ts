@@ -133,6 +133,17 @@ export default {
       return Response.json({ code: generateCode() });
     }
 
+    if (url.pathname === "/api/qr") {
+      const data = url.searchParams.get("data");
+      const size = /^\d{2,4}$/.test(url.searchParams.get("size") ?? "") ? url.searchParams.get("size") : "320";
+      if (!data) return new Response("Bad request", { status: 400 });
+      const res = await fetch(`https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&qzone=2&data=${encodeURIComponent(data)}`);
+      if (!res.ok) return new Response("QR generation failed", { status: 502 });
+      const h = new Headers(res.headers);
+      h.set("Cache-Control", "public, max-age=86400");
+      return new Response(res.body, { headers: h });
+    }
+
     if (url.pathname === "/ws/lobby") {
       const id = env.LOBBY.idFromName("global");
       return env.LOBBY.get(id).fetch(request);

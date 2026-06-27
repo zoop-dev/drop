@@ -575,7 +575,7 @@ async function enterRoom(code, isCreator, showCode = true) {
     section.style.display = '';
     document.getElementById('room-code-text').textContent = state.roomCode;
     const joinUrl = `${location.origin}?join=${state.roomCode}`;
-    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&qzone=2&data=${encodeURIComponent(joinUrl)}`;
+    const qrSrc = `/api/qr?size=320&data=${encodeURIComponent(joinUrl)}`;
     document.getElementById('qr-img').src = qrSrc;
     document.getElementById('qr-fullscreen-img').src = qrSrc;
     document.getElementById('copy-btn').onclick = () => {
