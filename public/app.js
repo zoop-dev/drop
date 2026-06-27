@@ -982,6 +982,16 @@ document.getElementById('btn-share-close').addEventListener('click', () => {
   document.getElementById('share-create-overlay').classList.add('hidden');
 });
 
+function shareError(msg) {
+  const nameEl = document.getElementById('share-receive-name');
+  const metaEl = document.getElementById('share-receive-meta');
+  const note = document.getElementById('share-receive-note');
+  nameEl.textContent = msg;
+  metaEl.textContent = '';
+  note.textContent = '';
+  document.getElementById('btn-share-download').style.display = 'none';
+}
+
 async function receiveShareLink(id, keyB64) {
   showView('share');
   history.replaceState({}, '', location.pathname);
@@ -994,14 +1004,21 @@ async function receiveShareLink(id, keyB64) {
 
   let payload;
   try {
-    const res = await fetch(`/api/share/${id}`);
-    if (!res.ok) {
-      nameEl.textContent = res.status === 404 ? 'Link not found or already used' : 'Error fetching link';
+    let res;
+    try {
+      res = await fetch(`/api/share/${id}`);
+    } catch {
+      shareError('Could not reach server — check your connection');
       return;
     }
+    if (res.status === 404) { shareError('Link not found or already used'); return; }
+    if (!res.ok) { shareError(`Something went wrong (${res.status})`); return; }
+    const ct = res.headers.get('content-type') ?? '';
+    if (!ct.includes('application/json')) { shareError('Unexpected server response'); return; }
     payload = await res.json();
+    if (!payload?.data || !payload?.iv) { shareError('Corrupt or incomplete link'); return; }
   } catch {
-    nameEl.textContent = 'Network error';
+    shareError('Failed to load share link');
     return;
   }
 
@@ -1012,18 +1029,36 @@ async function receiveShareLink(id, keyB64) {
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     btn.textContent = 'Decrypting...';
+    let key;
     try {
-      const key = await importKey(keyB64);
-      const decrypted = await decryptChunk(key, payload.iv, payload.data);
+      key = await importKey(keyB64);
+    } catch {
+      btn.textContent = 'Bad key — check the full link was copied';
+      btn.disabled = false;
+      return;
+    }
+    let decrypted;
+    try {
+      decrypted = await decryptChunk(key, payload.iv, payload.data);
+    } catch {
+      btn.textContent = 'Decryption failed — link may be corrupted';
+      btn.disabled = false;
+      return;
+    }
+    try {
       const blob = new Blob([decrypted], { type: payload.mime });
-      const url = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = payload.filename || 'file'; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      a.href = blobUrl;
+      a.download = payload.filename || 'file';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 3000);
       btn.textContent = 'Downloaded';
       document.getElementById('share-receive-note').textContent = 'File removed from servers.';
     } catch {
-      btn.textContent = 'Decryption failed';
+      btn.textContent = 'Download failed — try again';
       btn.disabled = false;
     }
   }, { once: true });
