@@ -565,6 +565,10 @@ async function enterRoom(code, isCreator, showCode = true) {
   state.isCreator = isCreator;
   connect(state.roomCode);
   showView('room');
+  sessionStorage.setItem('drop-room', state.roomCode);
+  sessionStorage.setItem('drop-creator', isCreator ? '1' : '0');
+  if (location.pathname !== '/room/' + state.roomCode)
+    history.pushState({}, '', '/room/' + state.roomCode);
 
   if (isCreator && showCode) {
     const section = document.getElementById('room-code-section');
@@ -683,6 +687,9 @@ document.getElementById('back-btn').addEventListener('click', () => {
   document.getElementById('overlay').classList.add('hidden');
   document.getElementById('lobby-overlay').classList.add('hidden');
   setDropEnabled(false);
+  sessionStorage.removeItem('drop-room');
+  sessionStorage.removeItem('drop-creator');
+  history.pushState({}, '', '/');
   showView('home');
 });
 
@@ -915,9 +922,15 @@ document.getElementById('qr-fullscreen').addEventListener('click', async () => {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
 
 const joinCode = new URLSearchParams(location.search).get('join');
+const roomPathMatch = location.pathname.match(/^\/room\/([A-Z0-9]{6})$/i);
 if (joinCode) {
   history.replaceState({}, '', '/');
   enterRoom(joinCode, false);
+} else if (roomPathMatch) {
+  const savedCode = sessionStorage.getItem('drop-room');
+  const wasCreator = sessionStorage.getItem('drop-creator') === '1';
+  const code = roomPathMatch[1].toUpperCase();
+  enterRoom(code, savedCode === code && wasCreator);
 }
 
 if (new URLSearchParams(location.search).get('incoming') === 'share') {

@@ -148,6 +148,14 @@ export default {
       return Response.redirect('/?incoming=share', 303);
     }
 
+    if (/^\/room\/[A-Z0-9]{6}$/i.test(url.pathname)) {
+      const rootReq = new Request(new URL('/', request.url).toString());
+      const res = await env.ASSETS.fetch(rootReq);
+      const h = new Headers(res.headers);
+      h.set('Cache-Control', 'no-store');
+      return new Response(res.body, { status: res.status, headers: h });
+    }
+
     const res = await env.ASSETS.fetch(request);
     const ct = res.headers.get('Content-Type') ?? '';
     if (ct.includes('text/html')) {
