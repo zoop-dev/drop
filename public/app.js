@@ -990,7 +990,7 @@ async function receiveShareLink(id, keyB64) {
   const btn = document.getElementById('btn-share-download');
   nameEl.textContent = 'Fetching...';
   metaEl.textContent = '';
-  btn.disabled = true;
+  btn.style.display = 'none';
 
   let payload;
   try {
@@ -1007,7 +1007,7 @@ async function receiveShareLink(id, keyB64) {
 
   nameEl.textContent = payload.filename || 'file';
   metaEl.textContent = payload.size ? fmtSize(payload.size) + ' · AES-256-GCM' : 'AES-256-GCM encrypted';
-  btn.disabled = false;
+  btn.style.display = '';
 
   btn.addEventListener('click', async () => {
     btn.disabled = true;
