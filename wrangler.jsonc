@@ -3,6 +3,9 @@
   "account_id": "5745d698d83c15e655924b25248a3029",
   "main": "src/index.ts",
   "compatibility_date": "2024-04-03",
+  "routes": [
+    { "pattern": "drop.zachy.cc/*", "zone_name": "zachy.cc" }
+  ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
