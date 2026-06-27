@@ -757,17 +757,26 @@ if (joinCode) {
 
 if (new URLSearchParams(location.search).get('incoming') === 'share') {
   history.replaceState({}, '', '/');
-  navigator.serviceWorker?.ready.then(() => {
-    navigator.serviceWorker.addEventListener('message', (e) => {
-      if (e.data?.type === 'shared-files' && e.data.files.length) {
-        state.pendingShareFiles = e.data.files;
-        const banner = document.createElement('div');
-        banner.id = 'share-banner';
-        banner.className = 'share-banner';
-        banner.innerHTML = `<span>${e.data.files.length} file${e.data.files.length > 1 ? 's' : ''} ready — create or join a room to send</span>`;
-        document.querySelector('.main').prepend(banner);
+  if ('serviceWorker' in navigator) {
+    const handler = (e) => {
+      if (e.data?.type !== 'shared-files') return;
+      navigator.serviceWorker.removeEventListener('message', handler);
+      if (!e.data.files.length) return;
+      state.pendingShareFiles = e.data.files;
+      const banner = document.createElement('div');
+      banner.id = 'share-banner';
+      banner.className = 'share-banner';
+      banner.innerHTML = `<span>${e.data.files.length} file${e.data.files.length > 1 ? 's' : ''} ready — create or join a room to send</span>`;
+      document.querySelector('.main').prepend(banner);
+    };
+    navigator.serviceWorker.addEventListener('message', handler);
+    const claimShare = () => navigator.serviceWorker.controller?.postMessage('claim-share');
+    navigator.serviceWorker.ready.then(() => {
+      if (navigator.serviceWorker.controller) {
+        claimShare();
+      } else {
+        navigator.serviceWorker.addEventListener('controllerchange', claimShare, { once: true });
       }
-    }, { once: true });
-    navigator.serviceWorker.controller?.postMessage('claim-share');
-  });
+    });
+  }
 }
