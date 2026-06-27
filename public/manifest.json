@@ -8,5 +8,15 @@
   "theme_color": "#00c8ff",
   "icons": [
     { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
-  ]
+  ],
+  "share_target": {
+    "action": "/share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [
+        { "name": "files", "accept": ["image/*", "video/*", "audio/*", "text/*", "application/*", "*/*"] }
+      ]
+    }
+  }
 }

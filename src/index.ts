@@ -71,20 +71,21 @@ export class LobbyRoom extends DurableObject<Env> {
     const url = new URL(request.url);
     const peerId = crypto.randomUUID();
     const nickname = (url.searchParams.get("nickname") ?? "Anonymous").slice(0, 30);
+    const subnet = (url.searchParams.get("subnet") ?? "").slice(0, 15);
 
     const { 0: client, 1: server } = new WebSocketPair();
-    this.ctx.acceptWebSocket(server, [peerId, nickname]);
+    this.ctx.acceptWebSocket(server, [peerId, nickname, subnet]);
 
     const peers = this.ctx
       .getWebSockets()
       .filter((ws) => ws !== server)
-      .map((ws) => { const [id, nick] = this.ctx.getTags(ws); return { id, nickname: nick }; });
+      .map((ws) => { const [id, nick, sub] = this.ctx.getTags(ws); return { id, nickname: nick, subnet: sub }; });
 
     server.send(JSON.stringify({ type: "lobby-welcome", peerId, peers }));
 
     for (const ws of this.ctx.getWebSockets()) {
       if (ws !== server) {
-        ws.send(JSON.stringify({ type: "lobby-peer-joined", peerId, nickname }));
+        ws.send(JSON.stringify({ type: "lobby-peer-joined", peerId, nickname, subnet }));
       }
     }
 
@@ -141,6 +142,10 @@ export default {
       const code = url.pathname.slice(4).split("?")[0].toUpperCase();
       if (!code) return new Response("Bad request", { status: 400 });
       return env.ROOMS.getByName(code).fetch(request);
+    }
+
+    if (url.pathname === '/share-target' && request.method === 'POST') {
+      return Response.redirect('/?incoming=share', 303);
     }
 
     const res = await env.ASSETS.fetch(request);

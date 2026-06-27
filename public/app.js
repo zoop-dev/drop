@@ -68,8 +68,10 @@ const state = {
   sendQueue: [],
   lobby: null,
   lobbyId: null,
+  mySubnet: null,
   lobbyPeers: {},
   pendingLobbyConnect: null,
+  pendingShareFiles: null,
 };
 
 function showView(id) {
@@ -153,7 +155,16 @@ async function handleMessage(msg) {
 const noPeersEl = document.getElementById('no-peers');
 const noLobbyPeersEl = document.getElementById('no-lobby-peers');
 
-function addPeer(id, name) { state.peers[id] = { name }; renderPeers(); }
+function addPeer(id, name) {
+  state.peers[id] = { name };
+  renderPeers();
+  if (state.pendingShareFiles?.length && Object.keys(state.peers).length === 1) {
+    const files = state.pendingShareFiles;
+    state.pendingShareFiles = null;
+    document.getElementById('share-banner')?.remove();
+    queueFiles(files);
+  }
+}
 
 function removePeer(id) {
   state.sendQueue.forEach(entry => {
@@ -565,17 +576,40 @@ const nicknameInput = document.getElementById('nickname-input');
 nicknameInput.value = localStorage.getItem(SAVED_NICKNAME_KEY) || '';
 nicknameInput.addEventListener('input', () => localStorage.setItem(SAVED_NICKNAME_KEY, nicknameInput.value.trim()));
 
-function connectLobby() {
+async function getLocalSubnet() {
+  return new Promise(resolve => {
+    try {
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      pc.createDataChannel('');
+      pc.createOffer().then(o => pc.setLocalDescription(o));
+      const done = (subnet) => { pc.close(); resolve(subnet); };
+      pc.onicecandidate = (e) => {
+        if (!e.candidate) return done(null);
+        const m = e.candidate.candidate.match(/(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}/);
+        if (m && !m[1].startsWith('127.')) done(m[1]);
+      };
+      setTimeout(() => done(null), 1500);
+    } catch { resolve(null); }
+  });
+}
+
+async function connectLobby() {
   const nick = nicknameInput.value.trim();
   if (!nick) { nicknameInput.focus(); return; }
   localStorage.setItem(SAVED_NICKNAME_KEY, nick);
 
+  const subnet = await getLocalSubnet();
+  state.mySubnet = subnet;
+
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  state.lobby = new WebSocket(`${proto}//${location.host}/ws/lobby?nickname=${encodeURIComponent(nick)}`);
+  const qs = new URLSearchParams({ nickname: nick });
+  if (subnet) qs.set('subnet', subnet);
+  state.lobby = new WebSocket(`${proto}//${location.host}/ws/lobby?${qs}`);
 
   state.lobby.onmessage = (e) => handleLobbyMessage(JSON.parse(e.data));
   state.lobby.onclose = () => {
     state.lobbyId = null;
+    state.mySubnet = null;
     state.lobbyPeers = {};
     renderLobbyPeers();
     document.getElementById('lobby-section').classList.add('hidden');
@@ -594,13 +628,14 @@ function handleLobbyMessage(msg) {
   switch (msg.type) {
     case 'lobby-welcome':
       state.lobbyId = msg.peerId;
-      msg.peers.forEach(p => { state.lobbyPeers[p.id] = { nickname: p.nickname }; });
+      msg.peers.forEach(p => { state.lobbyPeers[p.id] = { nickname: p.nickname, subnet: p.subnet }; });
       renderLobbyPeers();
       document.getElementById('lobby-section').classList.remove('hidden');
       break;
     case 'lobby-peer-joined':
-      state.lobbyPeers[msg.peerId] = { nickname: msg.nickname };
+      state.lobbyPeers[msg.peerId] = { nickname: msg.nickname, subnet: msg.subnet };
       renderLobbyPeers();
+      if (state.mySubnet && msg.subnet && msg.subnet === state.mySubnet) showNearbyToast(msg.peerId, msg.nickname);
       break;
     case 'lobby-peer-left':
       delete state.lobbyPeers[msg.peerId];
@@ -635,15 +670,28 @@ function renderLobbyPeers() {
     return;
   }
   ids.forEach(id => {
-    const el = document.createElement('div');
-    el.className = 'lobby-peer-card';
+    const peer = state.lobbyPeers[id];
+    const isNearby = state.mySubnet && peer.subnet && peer.subnet === state.mySubnet;
     const isPending = state.pendingLobbyConnect === id;
+    const el = document.createElement('div');
+    el.className = 'lobby-peer-card' + (isNearby ? ' nearby' : '');
     el.innerHTML = `
-      <span class="lobby-peer-name">${state.lobbyPeers[id].nickname}</span>
+      <span class="lobby-peer-name">${peer.nickname}${isNearby ? '<span class="nearby-badge">Nearby</span>' : ''}</span>
       <button class="btn-connect" data-id="${id}" ${isPending ? 'disabled' : ''}>${isPending ? 'Waiting...' : 'Connect'}</button>`;
     el.querySelector('.btn-connect').addEventListener('click', () => sendLobbyConnectRequest(id));
     list.appendChild(el);
   });
+}
+
+function showNearbyToast(peerId, nickname) {
+  document.querySelectorAll('.nearby-toast').forEach(t => t.remove());
+  const el = document.createElement('div');
+  el.className = 'nearby-toast';
+  el.innerHTML = `<span><strong>${nickname}</strong> is nearby</span><button class="nearby-toast-connect">Connect</button><button class="nearby-toast-dismiss">✕</button>`;
+  el.querySelector('.nearby-toast-connect').addEventListener('click', () => { sendLobbyConnectRequest(peerId); el.remove(); });
+  el.querySelector('.nearby-toast-dismiss').addEventListener('click', () => el.remove());
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 12000);
 }
 
 function sendLobbyConnectRequest(peerId) {
@@ -678,7 +726,7 @@ document.getElementById('lobby-btn-decline').addEventListener('click', () => {
   state.pendingLobbyConnect = null;
 });
 
-document.getElementById('btn-go-public').addEventListener('click', () => {
+document.getElementById('btn-go-public').addEventListener('click', async () => {
   const btn = document.getElementById('btn-go-public');
   if (state.lobby && state.lobby.readyState === WebSocket.OPEN) {
     disconnectLobby();
@@ -689,9 +737,12 @@ document.getElementById('btn-go-public').addEventListener('click', () => {
   } else {
     const nick = nicknameInput.value.trim();
     if (!nick) { nicknameInput.focus(); nicknameInput.style.borderColor = 'var(--danger)'; setTimeout(() => nicknameInput.style.borderColor = '', 1200); return; }
-    connectLobby();
+    btn.textContent = 'Connecting...';
+    btn.disabled = true;
+    await connectLobby();
     btn.textContent = 'Go private';
     btn.classList.add('active');
+    btn.disabled = false;
     nicknameInput.disabled = true;
   }
 });
@@ -702,4 +753,21 @@ const joinCode = new URLSearchParams(location.search).get('join');
 if (joinCode) {
   history.replaceState({}, '', '/');
   enterRoom(joinCode, false);
+}
+
+if (new URLSearchParams(location.search).get('incoming') === 'share') {
+  history.replaceState({}, '', '/');
+  navigator.serviceWorker?.ready.then(() => {
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data?.type === 'shared-files' && e.data.files.length) {
+        state.pendingShareFiles = e.data.files;
+        const banner = document.createElement('div');
+        banner.id = 'share-banner';
+        banner.className = 'share-banner';
+        banner.innerHTML = `<span>${e.data.files.length} file${e.data.files.length > 1 ? 's' : ''} ready — create or join a room to send</span>`;
+        document.querySelector('.main').prepend(banner);
+      }
+    }, { once: true });
+    navigator.serviceWorker.controller?.postMessage('claim-share');
+  });
 }
