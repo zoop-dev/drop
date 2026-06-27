@@ -476,7 +476,35 @@ async function receiveChunk(msg) {
   }
 }
 
+const AUTO_ACCEPT_KEY = 'drop-auto-accept';
+let autoAccept = localStorage.getItem(AUTO_ACCEPT_KEY) === '1';
+const autoAcceptToggle = document.getElementById('auto-accept-toggle');
+autoAcceptToggle.checked = autoAccept;
+autoAcceptToggle.addEventListener('change', () => {
+  autoAccept = autoAcceptToggle.checked;
+  localStorage.setItem(AUTO_ACCEPT_KEY, autoAccept ? '1' : '0');
+});
+
+async function autoAcceptRequest(msg) {
+  const peerName = state.peers[msg.from]?.name ?? msg.from;
+  if (msg.type === 'batch-request') {
+    const keys = await Promise.all(msg.files.map(f => importKey(f.key)));
+    state.batchRecvState[msg.batchId] = { total: msg.files.length, blobs: [] };
+    msg.files.forEach((f, i) => {
+      state.decryptKeys[f.fileId] = keys[i];
+      state.fileBatch[f.fileId] = msg.batchId;
+      addTransferItem(f.fileId, f.filename, f.size, 'recv', peerName);
+    });
+    send({ type: 'batch-accept', to: msg.from, batchId: msg.batchId });
+  } else {
+    state.decryptKeys[msg.fileId] = await importKey(msg.key);
+    addTransferItem(msg.fileId, msg.filename, msg.size, 'recv', peerName);
+    send({ type: 'transfer-accept', to: msg.from, fileId: msg.fileId });
+  }
+}
+
 function showIncomingRequest(msg) {
+  if (autoAccept && state.peers[msg.from]) { autoAcceptRequest(msg); return; }
   state.requestQueue.push(msg);
   if (!state.activeRequest) drainRequestQueue();
 }
@@ -543,8 +571,9 @@ async function enterRoom(code, isCreator, showCode = true) {
     section.style.display = '';
     document.getElementById('room-code-text').textContent = state.roomCode;
     const joinUrl = `${location.origin}?join=${state.roomCode}`;
-    document.getElementById('qr-img').src =
-      `https://api.qrserver.com/v1/create-qr-code/?size=160x160&qzone=2&data=${encodeURIComponent(joinUrl)}`;
+    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&qzone=2&data=${encodeURIComponent(joinUrl)}`;
+    document.getElementById('qr-img').src = qrSrc;
+    document.getElementById('qr-fullscreen-img').src = qrSrc;
     document.getElementById('copy-btn').onclick = () => {
       navigator.clipboard.writeText(joinUrl).then(() => {
         document.getElementById('copy-btn').textContent = 'Copied!';
@@ -869,6 +898,19 @@ function stopQRScan() {
 
 document.getElementById('btn-scan-qr').addEventListener('click', startQRScan);
 document.getElementById('btn-scan-close').addEventListener('click', stopQRScan);
+
+let wakeLock = null;
+document.getElementById('qr-img').addEventListener('click', async () => {
+  const overlay = document.getElementById('qr-fullscreen');
+  overlay.classList.remove('hidden');
+  try { await overlay.requestFullscreen(); } catch {}
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
+});
+document.getElementById('qr-fullscreen').addEventListener('click', async () => {
+  document.getElementById('qr-fullscreen').classList.add('hidden');
+  try { if (document.fullscreenElement) await document.exitFullscreen(); } catch {}
+  try { await wakeLock?.release(); wakeLock = null; } catch {}
+});
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
 

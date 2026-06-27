@@ -14,7 +14,7 @@
 <header>
   <span class="logo">drop</span>
   <div class="header-right">
-    <span class="version-badge">v13</span>
+    <span class="version-badge">v14</span>
     <button class="back-btn hidden" id="back-btn">leave room</button>
   </div>
 </header>
@@ -67,6 +67,10 @@
       <div class="peers-list" id="peers-list">
         <div class="no-peers" id="no-peers">Waiting for others to join...</div>
       </div>
+      <label class="auto-accept-row" id="auto-accept-row">
+        <input type="checkbox" id="auto-accept-toggle">
+        <span class="auto-accept-label">Auto-accept from connected devices</span>
+      </label>
     </div>
 
     <div class="drop-zone disabled" id="drop-zone">
@@ -106,6 +110,11 @@
       <button class="btn-decline" id="lobby-btn-decline">Decline</button>
     </div>
   </div>
+</div>
+
+<div class="qr-fullscreen hidden" id="qr-fullscreen">
+  <img id="qr-fullscreen-img" alt="Room QR code">
+  <div class="qr-fullscreen-hint">tap to close</div>
 </div>
 
 <div class="scan-overlay hidden" id="scan-overlay">

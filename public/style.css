@@ -504,3 +504,37 @@ header {
   transition: color 0.18s;
 }
 .btn-copy-text:hover { color: var(--blue); }
+
+.qr-fullscreen {
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  cursor: pointer;
+}
+.qr-fullscreen.hidden { display: none; }
+.qr-fullscreen img {
+  width: min(85vw, 75vh);
+  height: min(85vw, 75vh);
+  image-rendering: pixelated;
+  border-radius: 4px;
+}
+.qr-fullscreen-hint { margin-top: 20px; color: #888; font-size: 14px; }
+
+#qr-img { cursor: pointer; border-radius: 8px; transition: opacity 0.15s; }
+#qr-img:hover { opacity: 0.85; }
+
+.auto-accept-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  cursor: pointer;
+  width: fit-content;
+}
+.auto-accept-row input[type="checkbox"] { accent-color: var(--blue); width: 15px; height: 15px; cursor: pointer; }
+.auto-accept-label { font-size: 12px; color: var(--muted); user-select: none; }
