@@ -88,9 +88,10 @@ function connect(code) {
   state.ws.onerror = () => showRoomError('Connection failed. Check your internet and try again.');
   state.ws.onclose = (e) => {
     if (e.code === 1000) return;
-    setTimeout(() => {
-      if (state.roomCode && document.visibilityState === 'visible') connect(state.roomCode);
-    }, 1500);
+    cancelPendingTransfers();
+    Object.keys(state.peers).forEach(id => delete state.peers[id]);
+    renderPeers();
+    setTimeout(() => { if (state.roomCode) connect(state.roomCode); }, 1000);
   };
 }
 
@@ -108,6 +109,7 @@ async function handleMessage(msg) {
   switch (msg.type) {
     case 'welcome':
       state.myId = msg.peerId;
+      Object.keys(state.peers).forEach(id => delete state.peers[id]);
       msg.peers.forEach(p => addPeer(p.id, p.name));
       if (!state.isCreator && msg.peers.length === 0)
         showRoomError('Room is empty — make sure the other device created the room first.');
@@ -124,7 +126,29 @@ async function handleMessage(msg) {
 }
 
 function addPeer(id, name) { state.peers[id] = { name }; renderPeers(); }
-function removePeer(id) { delete state.peers[id]; renderPeers(); }
+
+function removePeer(id) {
+  state.sendQueue.forEach(entry => {
+    if (entry.pendingTargets.has(id)) {
+      markTransferStatus(entry.fileId, 'Connection lost', 'transfer-error');
+      entry.pendingTargets.delete(id);
+    }
+  });
+  delete state.peers[id];
+  renderPeers();
+}
+
+function cancelPendingTransfers() {
+  state.sendQueue.forEach(entry => {
+    if (entry.pendingTargets.size > 0) {
+      markTransferStatus(entry.fileId, 'Connection lost', 'transfer-error');
+      entry.pendingTargets.clear();
+    }
+  });
+  state.requestQueue = [];
+  state.activeRequest = null;
+  document.getElementById('overlay').classList.add('hidden');
+}
 
 function renderPeers() {
   const list = document.getElementById('peers-list');
@@ -202,7 +226,13 @@ function markTransferReceived(fileId, filename, blobUrl) {
 
 async function queueFiles(files) {
   const peerIds = Object.keys(state.peers);
-  if (!peerIds.length) return;
+  if (!peerIds.length) {
+    const sub = document.getElementById('drop-sub');
+    sub.textContent = 'No devices connected — reconnect first';
+    sub.style.color = 'var(--danger)';
+    setTimeout(() => { sub.textContent = 'Connect a device first'; sub.style.color = ''; }, 2500);
+    return;
+  }
 
   const isBatch = files.length > 1;
   const batchId = isBatch ? crypto.randomUUID() : null;
@@ -319,25 +349,25 @@ document.getElementById('btn-decline').addEventListener('click', () => {
   drainRequestQueue();
 });
 
-async function enterRoom(code, isCreator) {
+async function enterRoom(code, isCreator, showCode = true) {
   state.roomCode = code.toUpperCase();
   state.isCreator = isCreator;
   connect(state.roomCode);
   showView('room');
 
-  if (isCreator) {
+  if (isCreator && showCode) {
     const section = document.getElementById('room-code-section');
     section.style.display = '';
     document.getElementById('room-code-text').textContent = state.roomCode;
     const joinUrl = `${location.origin}?join=${state.roomCode}`;
     document.getElementById('qr-img').src =
       `https://api.qrserver.com/v1/create-qr-code/?size=160x160&qzone=2&data=${encodeURIComponent(joinUrl)}`;
-    document.getElementById('copy-btn').addEventListener('click', () => {
+    document.getElementById('copy-btn').onclick = () => {
       navigator.clipboard.writeText(joinUrl).then(() => {
         document.getElementById('copy-btn').textContent = 'Copied!';
         setTimeout(() => { document.getElementById('copy-btn').textContent = 'Copy link'; }, 2000);
       });
-    });
+    };
   }
 }
 
@@ -403,7 +433,7 @@ document.getElementById('code-input').addEventListener('keydown', e => {
 });
 
 document.getElementById('back-btn').addEventListener('click', () => {
-  state.ws?.close(1000);
+  if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(1000); }
   Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, sendQueue: [] });
   const list = document.getElementById('peers-list');
   const noPeers = document.getElementById('no-peers');
@@ -526,7 +556,7 @@ document.getElementById('lobby-btn-accept').addEventListener('click', async () =
   state.lobby.send(JSON.stringify({ type: 'connect-accept', to: peerId, roomCode: code }));
   state.pendingLobbyConnect = null;
   disconnectLobby();
-  enterRoom(code, true);
+  enterRoom(code, true, false);
 });
 
 document.getElementById('lobby-btn-decline').addEventListener('click', () => {
