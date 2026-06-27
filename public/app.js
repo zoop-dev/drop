@@ -57,6 +57,7 @@ const state = {
   myName: getDeviceName(),
   isCreator: false,
   ws: null,
+  reconnecting: false,
   peers: {},
   requestQueue: [],
   activeRequest: null,
@@ -81,23 +82,25 @@ function showRoomError(msg) {
 }
 
 function connect(code) {
-  if (state.ws) { state.ws.onclose = null; state.ws.close(); }
+  if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(); }
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   state.ws = new WebSocket(`${proto}//${location.host}/ws/${code}?name=${encodeURIComponent(state.myName)}`);
   state.ws.onmessage = async (e) => handleMessage(JSON.parse(e.data));
-  state.ws.onerror = () => showRoomError('Connection failed. Check your internet and try again.');
+  state.ws.onerror = () => {};
   state.ws.onclose = (e) => {
     if (e.code === 1000) return;
-    cancelPendingTransfers();
-    Object.keys(state.peers).forEach(id => delete state.peers[id]);
+    state.reconnecting = true;
     renderPeers();
-    setTimeout(() => { if (state.roomCode) connect(state.roomCode); }, 1000);
+    setTimeout(() => { if (state.roomCode && state.reconnecting) connect(state.roomCode); }, 1500);
   };
 }
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && state.roomCode) {
-    if (!state.ws || state.ws.readyState === WebSocket.CLOSED) connect(state.roomCode);
+    const ws = state.ws;
+    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+      connect(state.roomCode);
+    }
   }
 });
 
@@ -109,6 +112,7 @@ async function handleMessage(msg) {
   switch (msg.type) {
     case 'welcome':
       state.myId = msg.peerId;
+      state.reconnecting = false;
       Object.keys(state.peers).forEach(id => delete state.peers[id]);
       msg.peers.forEach(p => addPeer(p.id, p.name));
       if (!state.isCreator && msg.peers.length === 0)
@@ -158,17 +162,27 @@ function renderPeers() {
   const ids = Object.keys(state.peers);
   list.innerHTML = '';
   if (ids.length === 0) {
-    list.appendChild(noPeersEl);
+    if (state.reconnecting) {
+      const el = document.createElement('div');
+      el.className = 'no-peers';
+      el.textContent = 'Reconnecting...';
+      list.appendChild(el);
+    } else {
+      list.appendChild(noPeersEl);
+    }
     setDropEnabled(false);
     return;
   }
   ids.forEach(id => {
     const el = document.createElement('div');
     el.className = 'peer-card';
-    el.innerHTML = `<span class="peer-name">${state.peers[id].name}</span><span class="peer-status"><span class="dot"></span> Connected</span>`;
+    const status = state.reconnecting
+      ? `<span class="peer-status reconnecting-status">Reconnecting...</span>`
+      : `<span class="peer-status"><span class="dot"></span> Connected</span>`;
+    el.innerHTML = `<span class="peer-name">${state.peers[id].name}</span>${status}`;
     list.appendChild(el);
   });
-  setDropEnabled(true);
+  setDropEnabled(!state.reconnecting);
 }
 
 function setDropEnabled(enabled) {
@@ -461,7 +475,7 @@ document.getElementById('code-input').addEventListener('keydown', e => {
 
 document.getElementById('back-btn').addEventListener('click', () => {
   if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(1000); }
-  Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, sendQueue: [] });
+  Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, sendQueue: [] });
   const list = document.getElementById('peers-list');
   list.innerHTML = '';
   list.appendChild(noPeersEl);
