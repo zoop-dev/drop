@@ -109,7 +109,7 @@ const state = {
 function showView(id) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + id).classList.add('active');
-  document.getElementById('back-btn').classList.toggle('hidden', id === 'home');
+  document.getElementById('back-btn').classList.toggle('hidden', id === 'home' || id === 'share');
 }
 
 function showRoomError(msg) {

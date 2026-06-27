@@ -1,4 +1,4 @@
-const CACHE = 'drop-2026062718';
+const CACHE = 'drop-2026062719';
 const PRECACHE = ['/', '/style.css', '/app.js', '/manifest.json', '/favicon.svg'];
 
 self.addEventListener('install', e => {
