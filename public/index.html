@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>drop</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#00c8ff">
+<link rel="apple-touch-icon" href="/icon.svg">
+</head>
+<body>
+<header>
+  <span class="logo">drop</span>
+  <button class="back-btn hidden" id="back-btn">leave room</button>
+</header>
+
+<main class="main">
+  <div class="view active" id="view-home">
+    <div class="home-title">send anything,<br>anywhere.</div>
+    <div class="home-sub">Encrypted file transfer between devices. <span>No account. No tracking.</span></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-create">Create room</button>
+      <button class="btn btn-secondary" id="btn-join-show">Join room</button>
+    </div>
+
+    <div class="lobby-bar">
+      <input class="nickname-input" id="nickname-input" placeholder="pick a nickname" maxlength="24" autocomplete="off" spellcheck="false">
+      <button class="btn-public" id="btn-go-public">Go public</button>
+    </div>
+
+    <div id="lobby-section" class="hidden">
+      <div class="section-label">Online now</div>
+      <div id="lobby-list" class="lobby-list">
+        <div class="no-peers" id="no-lobby-peers">Nobody else is public right now</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="view" id="view-join">
+    <div class="join-wrapper">
+      <input class="code-input" id="code-input" maxlength="6" placeholder="XXXXXX" autocomplete="off" spellcheck="false">
+      <button class="btn btn-primary" id="btn-join">Join</button>
+    </div>
+  </div>
+
+  <div class="view" id="view-room">
+    <div id="room-code-section" class="room-code-display" style="display:none">
+      <div class="room-label">Room code</div>
+      <div class="room-code" id="room-code-text"></div>
+      <div class="qr-container"><img id="qr-img" width="160" height="160" alt="QR code"></div>
+      <button class="copy-btn" id="copy-btn">Copy link</button>
+    </div>
+
+    <div class="peers-section">
+      <div class="section-label">Connected devices</div>
+      <div class="peers-list" id="peers-list">
+        <div class="no-peers" id="no-peers">Waiting for others to join...</div>
+      </div>
+    </div>
+
+    <div class="drop-zone disabled" id="drop-zone">
+      <div class="drop-icon">&#8679;</div>
+      <div class="drop-title">Drop files to send</div>
+      <div class="drop-sub" id="drop-sub">Connect a device first</div>
+      <input type="file" id="file-input" multiple>
+    </div>
+
+    <div class="transfers" id="transfers"></div>
+  </div>
+</main>
+
+<div class="overlay hidden" id="overlay">
+  <div class="request-card">
+    <div class="request-from">Incoming from <strong id="req-from"></strong></div>
+    <div class="request-filename" id="req-filename"></div>
+    <div class="request-filesize" id="req-filesize"></div>
+    <div class="request-actions">
+      <button class="btn-accept" id="btn-accept">Accept</button>
+      <button class="btn-decline" id="btn-decline">Decline</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="lobby-overlay">
+  <div class="request-card">
+    <div class="request-from"><strong id="lobby-req-name"></strong> wants to connect</div>
+    <div class="request-filesize" style="margin-bottom:24px">They'll be added to your room</div>
+    <div class="request-actions">
+      <button class="btn-accept" id="lobby-btn-accept">Accept</button>
+      <button class="btn-decline" id="lobby-btn-decline">Decline</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

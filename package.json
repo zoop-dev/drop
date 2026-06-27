@@ -1,0 +1,14 @@
+{
+  "name": "file-transfer",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260627.1",
+    "typescript": "^6.0.3",
+    "wrangler": "^4.105.0"
+  }
+}

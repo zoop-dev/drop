@@ -1,0 +1,12 @@
+{
+  "name": "drop",
+  "short_name": "drop",
+  "description": "Encrypted file transfer between devices",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#06060d",
+  "theme_color": "#00c8ff",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
