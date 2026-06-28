@@ -262,11 +262,22 @@ function connect(code) {
   };
 }
 
+let unreadCount = 0;
+function incUnread() {
+  if (document.visibilityState === 'visible') return;
+  unreadCount++;
+  document.title = `(${unreadCount}) drop`;
+}
+
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && state.roomCode && state.reconnecting) {
-    const ws = state.ws;
-    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
-      connect(state.roomCode);
+  if (document.visibilityState === 'visible') {
+    unreadCount = 0;
+    document.title = 'drop';
+    if (state.roomCode && state.reconnecting) {
+      const ws = state.ws;
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        connect(state.roomCode);
+      }
     }
   }
 });
@@ -473,6 +484,7 @@ function markTransferReceived(fileId, filename, blobUrl, mimeType) {
   const el = document.getElementById('transfer-' + fileId);
   if (!el) return;
   el.querySelector('.progress-fill').style.width = '100%';
+  incUnread();
   const isImage = mimeType?.startsWith('image/');
   if (isImage) {
     const thumb = document.createElement('img');
@@ -794,6 +806,7 @@ async function receiveText(msg) {
 }
 
 function addTextItem(text, from, isMine) {
+  if (!isMine) incUnread();
   const el = document.createElement('div');
   el.className = 'text-item';
   const meta = document.createElement('div');
@@ -846,11 +859,14 @@ fileInput.addEventListener('change', () => {
 document.addEventListener('paste', e => {
   if (!state.roomCode) return;
   if (e.target.matches('input, textarea, [contenteditable]')) return;
-  const files = Array.from(e.clipboardData.items)
-    .filter(it => it.kind === 'file')
-    .map(it => it.getAsFile())
-    .filter(Boolean);
-  if (files.length) { e.preventDefault(); queueFiles(files); }
+  const items = Array.from(e.clipboardData.items);
+  const files = items.filter(it => it.kind === 'file').map(it => it.getAsFile()).filter(Boolean);
+  if (files.length) { e.preventDefault(); queueFiles(files); return; }
+  const textItem = items.find(it => it.kind === 'string' && it.type === 'text/plain');
+  if (textItem && Object.keys(state.peers).length) {
+    e.preventDefault();
+    textItem.getAsString(text => { if (text.trim()) sendText(text.trim()); });
+  }
 });
 
 function requireNick() {
