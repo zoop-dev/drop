@@ -147,12 +147,19 @@ async function handleBinaryMessage(buffer) {
     recv.received++;
     updateProgress(fileId, Math.min(99, (recv.received / total) * 100), 'Receiving...');
     if (recv.received >= total) {
+      const ordered = Array.from({ length: total }, (_, i) => recv.chunks[i]);
+      if (ordered.some(c => !c)) {
+        markTransferStatus(fileId, 'Transfer incomplete — retry', 'transfer-error');
+        delete state.recvState[fileId];
+        delete state.decryptKeys[fileId];
+        return;
+      }
       let blob;
       if (recv.compressed) {
-        const combined = await new Blob(recv.chunks.map(c => new Uint8Array(c))).arrayBuffer();
+        const combined = await new Blob(ordered.map(c => new Uint8Array(c))).arrayBuffer();
         blob = new Blob([await decompressBuffer(combined)], { type: recv.mimeType });
       } else {
-        blob = new Blob(recv.chunks.map(c => new Uint8Array(c)), { type: recv.mimeType });
+        blob = new Blob(ordered.map(c => new Uint8Array(c)), { type: recv.mimeType });
       }
       markTransferReceived(fileId, recv.name, URL.createObjectURL(blob), recv.mimeType);
       delete state.recvState[fileId];
