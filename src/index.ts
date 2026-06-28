@@ -48,7 +48,7 @@ export class TransferRoom extends DurableObject<Env> {
       const forwarded = new Uint8Array(16 + rest.byteLength);
       forwarded.set(fromBytes, 0);
       forwarded.set(rest, 16);
-      targets[0].send(forwarded.buffer);
+      for (const t of targets) t.send(forwarded.buffer);
       return;
     }
     let data: Record<string, unknown>;
