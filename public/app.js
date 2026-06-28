@@ -1,3 +1,111 @@
+const DROP_QR = (() => {
+  const EXP = new Uint8Array(512), LOG = new Uint8Array(256);
+  { let x=1; for(let i=0;i<255;i++){EXP[i]=EXP[i+255]=x;LOG[x]=i;x=(x<<1)^(x&0x80?0x11d:0);x&=0xff;} }
+  const gm=(a,b)=>a&&b?EXP[LOG[a]+LOG[b]]:0;
+
+  function rsGen(n){let g=[1];for(let i=0;i<n;i++){const r=new Array(g.length+1).fill(0);for(let j=0;j<g.length;j++){r[j]^=gm(g[j],1);r[j+1]^=gm(g[j],EXP[i]);}g=r;}return g;}
+  function rsEnc(data,n){const g=rsGen(n),msg=[...data,...new Array(n).fill(0)];for(let i=0;i<data.length;i++){const c=msg[i];if(c)for(let j=0;j<=n;j++)msg[i+j]^=gm(c,g[j]);}return msg.slice(data.length);}
+  function fmtBch(d){let x=d<<10;for(let i=4;i>=0;i--)if(x&(1<<(i+10)))x^=0x537<<i;return((d<<10)|(x&0x3ff))^0x5412;}
+
+  const VER=[null,{s:21,dc:19,ec:7},{s:25,dc:34,ec:10},{s:29,dc:55,ec:15},{s:33,dc:80,ec:25}];
+
+  function encode(text){
+    const bytes=new TextEncoder().encode(text),n=bytes.length;
+    let v=1;while(v<=4&&VER[v].dc<n+2)v++;if(v>4)return null;
+    const{s:N,dc,ec}=VER[v];
+    const bits=[],push=(val,len)=>{for(let i=len-1;i>=0;i--)bits.push((val>>i)&1);};
+    push(4,4);push(n,8);for(const b of bytes)push(b,8);push(0,4);
+    while(bits.length%8)bits.push(0);
+    const cw=[];for(let i=0;i<bits.length;i+=8){let b=0;for(let j=0;j<8;j++)b=(b<<1)|(bits[i+j]||0);cw.push(b);}
+    while(cw.length<dc)cw.push(cw.length&1?0x11:0xec);
+    const all=[...cw,...rsEnc(cw,ec)];
+    const M=Array.from({length:N},()=>Array(N).fill(false));
+    const F=Array.from({length:N},()=>Array(N).fill(false));
+    const sf=(r,c,d)=>{if(r>=0&&r<N&&c>=0&&c<N){M[r][c]=d;F[r][c]=true;}};
+    const fin=(tr,tc)=>{
+      for(let dr=0;dr<7;dr++)for(let dc2=0;dc2<7;dc2++)
+        sf(tr+dr,tc+dc2,(dr===0||dr===6||dc2===0||dc2===6)||(dr>=2&&dr<=4&&dc2>=2&&dc2<=4));
+      for(let i=-1;i<=7;i++){sf(tr-1,tc+i,false);sf(tr+7,tc+i,false);sf(tr+i,tc-1,false);sf(tr+i,tc+7,false);}
+    };
+    fin(0,0);fin(0,N-7);fin(N-7,0);
+    for(let i=8;i<N-8;i++){sf(6,i,i%2===0);sf(i,6,i%2===0);}
+    sf(4*v+9,8,true);
+    if(v>=2){const a=N-7;for(let dr=-2;dr<=2;dr++)for(let dc2=-2;dc2<=2;dc2++){
+      if(F[a+dr]?.[a+dc2])continue;sf(a+dr,a+dc2,(Math.abs(dr)===2||Math.abs(dc2)===2)||(!dr&&!dc2));
+    }}
+    const FP=[[8,0],[8,1],[8,2],[8,3],[8,4],[8,5],[8,7],[8,8],[7,8],[5,8],[4,8],[3,8],[2,8],[1,8],[0,8]];
+    for(const[r,c]of FP)if(!F[r][c]){M[r][c]=false;F[r][c]=true;}
+    for(let i=0;i<7;i++)if(!F[N-7+i][8]){M[N-7+i][8]=false;F[N-7+i][8]=true;}
+    for(let i=0;i<8;i++)if(!F[8][N-8+i]){M[8][N-8+i]=false;F[8][N-8+i]=true;}
+    const abits=all.flatMap(b=>[7,6,5,4,3,2,1,0].map(i=>(b>>i)&1));
+    let idx=0,up=true;
+    for(let col=N-1;col>=1;col-=2){
+      if(col===6)col--;
+      for(let ri=0;ri<N;ri++){const r=up?N-1-ri:ri;for(const c of[col,col-1]){if(c<0||F[r][c])continue;M[r][c]=idx<abits.length?!!abits[idx++]:false;}}
+      up=!up;
+    }
+    const mkfns=[
+      (r,c)=>(r+c)%2===0,(r,c)=>r%2===0,(r,c)=>c%3===0,(r,c)=>(r+c)%3===0,
+      (r,c)=>(Math.floor(r/2)+Math.floor(c/3))%2===0,(r,c)=>(r*c)%2+(r*c)%3===0,
+      (r,c)=>((r*c)%2+(r*c)%3)%2===0,(r,c)=>((r+c)%2+(r*c)%3)%2===0,
+    ];
+    let best=null,bestS=Infinity;
+    for(let mk=0;mk<8;mk++){
+      const mm=M.map((row,r)=>row.map((val,c)=>F[r][c]?val:mkfns[mk](r,c)?!val:val));
+      const fi=fmtBch(8|mk);
+      for(let i=0;i<15;i++)mm[FP[i][0]][FP[i][1]]=!!((fi>>i)&1);
+      for(let i=0;i<7;i++)mm[N-1-i][8]=!!((fi>>i)&1);
+      for(let i=0;i<8;i++)mm[8][N-8+i]=!!((fi>>(7+i))&1);
+      mm[4*v+9][8]=true;
+      const sc=pen(mm);if(sc<bestS){bestS=sc;best=mm;}
+    }
+    return{matrix:best,version:v};
+  }
+
+  function pen(m){
+    const N=m.length;let s=0;
+    for(let r=0;r<N;r++)for(let c=0;c<N;){let run=1;while(c+run<N&&m[r][c+run]===m[r][c])run++;if(run>=5)s+=run-2;c+=run;}
+    for(let c=0;c<N;c++)for(let r=0;r<N;){let run=1;while(r+run<N&&m[r+run][c]===m[r][c])run++;if(run>=5)s+=run-2;r+=run;}
+    for(let r=0;r<N-1;r++)for(let c=0;c<N-1;c++)if(m[r][c]===m[r][c+1]&&m[r][c]===m[r+1][c]&&m[r][c]===m[r+1][c+1])s+=3;
+    const p1=[1,0,1,1,1,0,1,0,0,0,0].map(Boolean),p2=[0,0,0,0,1,0,1,1,1,0,1].map(Boolean);
+    for(let r=0;r<N;r++)for(let c=0;c<=N-11;c++){let a=1,b=1;for(let k=0;k<11;k++){if(m[r][c+k]!==p1[k])a=0;if(m[r][c+k]!==p2[k])b=0;}if(a||b)s+=40;}
+    for(let c=0;c<N;c++)for(let r=0;r<=N-11;r++){let a=1,b=1;for(let k=0;k<11;k++){if(m[r+k][c]!==p1[k])a=0;if(m[r+k][c]!==p2[k])b=0;}if(a||b)s+=40;}
+    let dk=0;for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(m[r][c])dk++;
+    s+=Math.floor(Math.abs(100*dk/(N*N)-50)/5)*10;
+    return s;
+  }
+
+  function render(canvas,qr,modSize=12,quiet=4){
+    const{matrix,version}=qr,N=matrix.length,SIZE=(N+2*quiet)*modSize;
+    canvas.width=canvas.height=SIZE;
+    const ctx=canvas.getContext('2d'),M=modSize,off=quiet*M;
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,SIZE,SIZE);
+    const pad=M*0.1,ms=M-2*pad,cr=ms*0.28;
+    ctx.fillStyle='#111';
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      if(!matrix[r][c])continue;
+      ctx.beginPath();ctx.roundRect(off+c*M+pad,off+r*M+pad,ms,ms,cr);ctx.fill();
+    }
+    const fin=(tr,tc)=>{
+      const x=off+tc*M,y=off+tr*M,fw=7*M;
+      ctx.fillStyle='#fff';ctx.fillRect(x,y,fw,fw);
+      ctx.fillStyle='#00c8ff';ctx.beginPath();ctx.roundRect(x,y,fw,fw,M*0.85);ctx.fill();
+      ctx.fillStyle='#fff';ctx.beginPath();ctx.roundRect(x+M,y+M,5*M,5*M,M*0.5);ctx.fill();
+      ctx.fillStyle='#111';ctx.beginPath();ctx.roundRect(x+2*M,y+2*M,3*M,3*M,M*0.42);ctx.fill();
+    };
+    fin(0,0);fin(0,N-7);fin(N-7,0);
+    if(version>=2){
+      const a=N-7,ax=off+(a-2)*M,ay=off+(a-2)*M,aw=5*M;
+      ctx.fillStyle='#fff';ctx.fillRect(ax,ay,aw,aw);
+      ctx.fillStyle='#00c8ff';ctx.beginPath();ctx.roundRect(ax,ay,aw,aw,M*0.5);ctx.fill();
+      ctx.fillStyle='#fff';ctx.beginPath();ctx.roundRect(ax+M,ay+M,3*M,3*M,M*0.32);ctx.fill();
+      ctx.fillStyle='#111';ctx.beginPath();ctx.roundRect(ax+2*M,ay+2*M,M,M,M*0.25);ctx.fill();
+    }
+  }
+
+  return{encode,render};
+})();
+
 function fmtSize(bytes) {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
@@ -270,7 +378,7 @@ async function handleMessage(msg) {
     case 'batch-decline':
       state.sendQueue.filter(e => e.batchId === msg.batchId).forEach(e => markTransferStatus(e.fileId, 'Declined', 'transfer-error'));
       break;
-    case 'chunk': break;
+    case 'chunk': await receiveChunk(msg); break;
     case 'transfer-error': markTransferStatus(msg.fileId, 'Transfer failed', 'transfer-error'); break;
     case 'transfer-cancel':
       delete state.decryptKeys[msg.fileId];
@@ -559,6 +667,8 @@ async function startSendingFile(fromPeerId, fileId) {
   let offset = 0, index = 0;
   const startTime = Date.now();
 
+  const useJsonChunks = mimeType.startsWith('video/');
+
   try {
     while (offset < totalBytes) {
       if (state.cancelledTransfers.has(fileId)) {
@@ -569,9 +679,15 @@ async function startSendingFile(fromPeerId, fileId) {
       }
       const buffer = srcBuf ? srcBuf.slice(offset, offset + CHUNK_SIZE)
                             : await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer();
-      const { iv, data } = await encryptChunkRaw(key, buffer);
-      const meta = index === 0 ? { filename: file.name, size: file.size, mimeType } : null;
-      sendBinaryChunk(fromPeerId, fileId, index, total, iv, data, compressed, meta);
+      if (useJsonChunks) {
+        const { iv, data } = await encryptChunk(key, buffer);
+        send({ type: 'chunk', to: fromPeerId, fileId, index, total, iv, data,
+          filename: file.name, size: file.size, mimeType, compressed });
+      } else {
+        const { iv, data } = await encryptChunkRaw(key, buffer);
+        const meta = index === 0 ? { filename: file.name, size: file.size, mimeType } : null;
+        sendBinaryChunk(fromPeerId, fileId, index, total, iv, data, compressed, meta);
+      }
       offset += buffer.byteLength;
       index++;
       const elapsed = (Date.now() - startTime) / 1000 || 0.001;
@@ -605,12 +721,19 @@ async function receiveChunk(msg) {
     recv.received++;
     updateProgress(fileId, Math.min(99, (recv.received / total) * 100), 'Receiving...');
     if (recv.received >= total) {
+      const ordered = Array.from({ length: total }, (_, i) => recv.chunks[i]);
+      if (ordered.some(c => !c)) {
+        markTransferStatus(fileId, 'Transfer incomplete — retry', 'transfer-error');
+        delete state.recvState[fileId];
+        delete state.decryptKeys[fileId];
+        return;
+      }
       let blob;
       if (recv.compressed) {
-        const combined = await new Blob(recv.chunks).arrayBuffer();
+        const combined = await new Blob(ordered.map(c => new Uint8Array(c))).arrayBuffer();
         blob = new Blob([await decompressBuffer(combined)], { type: recv.mimeType });
       } else {
-        blob = new Blob(recv.chunks, { type: recv.mimeType });
+        blob = new Blob(ordered.map(c => new Uint8Array(c)), { type: recv.mimeType });
       }
       markTransferReceived(fileId, recv.name, URL.createObjectURL(blob), recv.mimeType);
       delete state.recvState[fileId];
@@ -720,9 +843,17 @@ async function enterRoom(code, isCreator, showCode = true) {
     section.style.display = '';
     document.getElementById('room-code-text').textContent = state.roomCode;
     const joinUrl = `${location.origin}?join=${state.roomCode}`;
-    const qrSrc = `/api/qr?size=320&data=${encodeURIComponent(joinUrl)}`;
-    document.getElementById('qr-img').src = qrSrc;
-    document.getElementById('qr-fullscreen-img').src = qrSrc;
+    const qr = DROP_QR.encode(joinUrl);
+    if (qr) {
+      const dpr = window.devicePixelRatio || 1;
+      const N = qr.matrix.length;
+      const smallMod = Math.max(4, Math.floor(160 * dpr / (N + 8)));
+      const smallCanvas = document.getElementById('qr-canvas');
+      DROP_QR.render(smallCanvas, qr, smallMod, 4);
+      smallCanvas.style.width = smallCanvas.style.height = '160px';
+      const fsCanvas = document.getElementById('qr-fullscreen-canvas');
+      DROP_QR.render(fsCanvas, qr, 20, 4);
+    }
     document.getElementById('copy-btn').onclick = () => {
       navigator.clipboard.writeText(joinUrl).then(() => {
         document.getElementById('copy-btn').textContent = 'Copied!';
@@ -1089,7 +1220,7 @@ document.getElementById('btn-scan-qr').addEventListener('click', startQRScan);
 document.getElementById('btn-scan-close').addEventListener('click', stopQRScan);
 
 let wakeLock = null;
-document.getElementById('qr-img').addEventListener('click', async () => {
+document.getElementById('qr-canvas').addEventListener('click', async () => {
   const overlay = document.getElementById('qr-fullscreen');
   overlay.classList.remove('hidden');
   try { await overlay.requestFullscreen(); } catch {}

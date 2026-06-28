@@ -14,7 +14,7 @@
 <header>
   <span class="logo">drop</span>
   <div class="header-right">
-    <span class="version-badge">v23</span>
+    <span class="version-badge">v24</span>
     <button class="back-btn hidden" id="back-btn">leave room</button>
   </div>
 </header>
@@ -60,7 +60,7 @@
     <div id="room-code-section" class="room-code-display" style="display:none">
       <div class="room-label">Room code</div>
       <div class="room-code" id="room-code-text"></div>
-      <div class="qr-container"><img id="qr-img" width="160" height="160" alt="QR code"></div>
+      <div class="qr-container"><canvas id="qr-canvas"></canvas></div>
       <button class="copy-btn" id="copy-btn">Copy link</button>
     </div>
 
@@ -142,7 +142,7 @@
 </div>
 
 <div class="qr-fullscreen hidden" id="qr-fullscreen">
-  <img id="qr-fullscreen-img" alt="Room QR code">
+  <canvas id="qr-fullscreen-canvas"></canvas>
   <div class="qr-fullscreen-hint">tap to close</div>
 </div>
 

@@ -113,7 +113,7 @@ header {
 .room-label { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-bottom: 10px; }
 .room-code { font-size: 36px; font-weight: 800; letter-spacing: 8px; color: var(--blue); margin-bottom: 16px; }
 .qr-container { display: flex; justify-content: center; margin-bottom: 16px; }
-.qr-container img { border-radius: 8px; display: block; }
+.qr-container canvas { border-radius: 8px; display: block; }
 
 .copy-btn {
   background: var(--blue-dim);
@@ -520,16 +520,15 @@ header {
   cursor: pointer;
 }
 .qr-fullscreen.hidden { display: none; }
-.qr-fullscreen img {
+.qr-fullscreen canvas {
   width: min(85vw, 75vh);
   height: min(85vw, 75vh);
-  image-rendering: pixelated;
-  border-radius: 4px;
+  border-radius: 12px;
 }
 .qr-fullscreen-hint { margin-top: 20px; color: #888; font-size: 14px; }
 
-#qr-img { cursor: pointer; border-radius: 8px; transition: opacity 0.15s; }
-#qr-img:hover { opacity: 0.85; }
+#qr-canvas { cursor: pointer; border-radius: 8px; transition: opacity 0.15s; }
+#qr-canvas:hover { opacity: 0.85; }
 
 .auto-accept-row {
   display: flex;
