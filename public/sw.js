@@ -1,5 +1,5 @@
-const CACHE = 'drop-2026062823';
-const PRECACHE = ['/', '/style.css', '/app.js', '/manifest.json', '/favicon.svg'];
+const CACHE = 'drop-2026062726';
+const PRECACHE = ['/', '/style.css', '/qrlib.js', '/app.js', '/manifest.json', '/favicon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)));
