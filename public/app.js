@@ -11,30 +11,13 @@ const DROP_QR = (() => {
   }
 
   function render(canvas,qr,modSize=12,quiet=4){
-    const{matrix,version}=qr,N=matrix.length,SIZE=(N+2*quiet)*modSize;
+    const{matrix}=qr,N=matrix.length,SIZE=(N+2*quiet)*modSize;
     canvas.width=canvas.height=SIZE;
     const ctx=canvas.getContext('2d'),M=modSize,off=quiet*M;
     ctx.fillStyle='#fff';ctx.fillRect(0,0,SIZE,SIZE);
-    const pad=M*0.1,ms=M-2*pad,cr=ms*0.28;
-    ctx.fillStyle='#111';
+    ctx.fillStyle='#000';
     for(let r=0;r<N;r++)for(let c=0;c<N;c++){
-      if(!matrix[r][c])continue;
-      ctx.beginPath();ctx.roundRect(off+c*M+pad,off+r*M+pad,ms,ms,cr);ctx.fill();
-    }
-    const fin=(tr,tc)=>{
-      const x=off+tc*M,y=off+tr*M,fw=7*M;
-      ctx.fillStyle='#fff';ctx.fillRect(x,y,fw,fw);
-      ctx.fillStyle='#00c8ff';ctx.beginPath();ctx.roundRect(x,y,fw,fw,M*0.85);ctx.fill();
-      ctx.fillStyle='#fff';ctx.beginPath();ctx.roundRect(x+M,y+M,5*M,5*M,M*0.5);ctx.fill();
-      ctx.fillStyle='#111';ctx.beginPath();ctx.roundRect(x+2*M,y+2*M,3*M,3*M,M*0.42);ctx.fill();
-    };
-    fin(0,0);fin(0,N-7);fin(N-7,0);
-    if(version>=2){
-      const a=N-7,ax=off+(a-2)*M,ay=off+(a-2)*M,aw=5*M;
-      ctx.fillStyle='#fff';ctx.fillRect(ax,ay,aw,aw);
-      ctx.fillStyle='#00c8ff';ctx.beginPath();ctx.roundRect(ax,ay,aw,aw,M*0.5);ctx.fill();
-      ctx.fillStyle='#fff';ctx.beginPath();ctx.roundRect(ax+M,ay+M,3*M,3*M,M*0.32);ctx.fill();
-      ctx.fillStyle='#111';ctx.beginPath();ctx.roundRect(ax+2*M,ay+2*M,M,M,M*0.25);ctx.fill();
+      if(matrix[r][c])ctx.fillRect(off+c*M,off+r*M,M,M);
     }
   }
 
