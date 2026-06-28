@@ -585,8 +585,6 @@ async function startSendingFile(fromPeerId, fileId) {
   let offset = 0, index = 0;
   const startTime = Date.now();
 
-  const useJsonChunks = mimeType.startsWith('video/');
-
   try {
     while (offset < totalBytes) {
       if (state.cancelledTransfers.has(fileId)) {
@@ -597,15 +595,9 @@ async function startSendingFile(fromPeerId, fileId) {
       }
       const buffer = srcBuf ? srcBuf.slice(offset, offset + CHUNK_SIZE)
                             : await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer();
-      if (useJsonChunks) {
-        const { iv, data } = await encryptChunk(key, buffer);
-        send({ type: 'chunk', to: fromPeerId, fileId, index, total, iv, data,
-          filename: file.name, size: file.size, mimeType, compressed });
-      } else {
-        const { iv, data } = await encryptChunkRaw(key, buffer);
-        const meta = index === 0 ? { filename: file.name, size: file.size, mimeType } : null;
-        sendBinaryChunk(fromPeerId, fileId, index, total, iv, data, compressed, meta);
-      }
+      const { iv, data } = await encryptChunkRaw(key, buffer);
+      const meta = index === 0 ? { filename: file.name, size: file.size, mimeType } : null;
+      sendBinaryChunk(fromPeerId, fileId, index, total, iv, data, compressed, meta);
       offset += buffer.byteLength;
       index++;
       const elapsed = (Date.now() - startTime) / 1000 || 0.001;
@@ -1101,6 +1093,15 @@ document.getElementById('btn-go-public').addEventListener('click', async () => {
 
 let scanStream = null, scanInterval = null;
 
+function showScanError(msg) {
+  document.getElementById('scan-video').classList.add('hidden');
+  document.querySelector('.scan-aim').classList.add('hidden');
+  const el = document.getElementById('scan-error-msg');
+  el.innerHTML = `<span class="scan-error-icon">📵</span>${msg}`;
+  el.classList.remove('hidden');
+  document.getElementById('scan-overlay').classList.remove('hidden');
+}
+
 async function startQRScan() {
   if (!('BarcodeDetector' in window)) {
     const code = prompt('QR scanning not supported — enter room code:');
@@ -1109,7 +1110,13 @@ async function startQRScan() {
   }
   try {
     scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-  } catch { return; }
+  } catch (err) {
+    const denied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError';
+    showScanError(denied
+      ? 'Camera access is blocked.\nEnable it in your browser or device settings, then try again.'
+      : 'Could not access camera.\nMake sure a camera is available.');
+    return;
+  }
   const video = document.getElementById('scan-video');
   video.srcObject = scanStream;
   document.getElementById('scan-overlay').classList.remove('hidden');
@@ -1132,6 +1139,11 @@ function stopQRScan() {
   clearInterval(scanInterval); scanInterval = null;
   scanStream?.getTracks().forEach(t => t.stop()); scanStream = null;
   document.getElementById('scan-overlay').classList.add('hidden');
+  document.getElementById('scan-video').classList.remove('hidden');
+  document.querySelector('.scan-aim').classList.remove('hidden');
+  const errEl = document.getElementById('scan-error-msg');
+  errEl.classList.add('hidden');
+  errEl.innerHTML = '';
 }
 
 document.getElementById('btn-scan-qr').addEventListener('click', startQRScan);
