@@ -843,6 +843,16 @@ fileInput.addEventListener('change', () => {
   fileInput.value = '';
 });
 
+document.addEventListener('paste', e => {
+  if (!state.roomCode) return;
+  if (e.target.matches('input, textarea, [contenteditable]')) return;
+  const files = Array.from(e.clipboardData.items)
+    .filter(it => it.kind === 'file')
+    .map(it => it.getAsFile())
+    .filter(Boolean);
+  if (files.length) { e.preventDefault(); queueFiles(files); }
+});
+
 function requireNick() {
   const nick = nicknameInput.value.trim();
   if (!nick) {
