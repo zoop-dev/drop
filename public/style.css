@@ -147,7 +147,7 @@ header {
   transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Home */
+
 .home-title {
   font-size: 46px;
   font-weight: 800;
@@ -197,7 +197,7 @@ header {
   box-shadow: 0 6px 16px rgba(0, 200, 255, 0.1);
 }
 
-/* Join */
+
 .join-wrapper { display: flex; flex-direction: column; gap: 16px; }
 
 .code-input {
@@ -218,7 +218,7 @@ header {
 .code-input:focus { border-color: var(--blue); }
 .code-input::placeholder { color: var(--muted); letter-spacing: 4px; font-weight: 400; font-size: 16px; }
 
-/* Room */
+
 .room-code-display {
   background: var(--card);
   border: 1px solid var(--border);
@@ -317,7 +317,7 @@ header {
   border-radius: 10px;
 }
 
-/* Drop zone */
+
 .drop-zone {
   border: 2px dashed var(--border);
   border-radius: 16px;
@@ -342,7 +342,7 @@ header {
 .drop-sub { font-size: 13px; color: var(--muted); }
 #file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
-/* Transfers */
+
 .transfers { display: flex; flex-direction: column; gap: 10px; }
 
 .transfer-item {
@@ -415,7 +415,7 @@ header {
 }
 .download-btn:hover { background: var(--blue-glow); }
 
-/* Modal */
+
 .overlay {
   position: fixed;
   inset: 0;
@@ -923,7 +923,7 @@ header {
 }
 .btn-copy-share:hover { background: var(--blue-glow); }
 
-/* Share File View Redesign */
+
 .view#view-share.active {
   display: flex;
   flex-direction: column;
@@ -1068,7 +1068,7 @@ header {
   50% { box-shadow: 0 0 25px rgba(0, 200, 255, 0.15); border-color: rgba(0, 200, 255, 0.4); }
 }
 
-/* Desktop Split Layout for Room View */
+
 @media (min-width: 768px) {
   body:has(#view-room.active) header,
   body:has(#view-room.active) .main {
@@ -1108,7 +1108,7 @@ header {
   }
 }
 
-/* Tippy Custom Theme */
+
 .tippy-box[data-theme~="drop"] {
   background-color: var(--card);
   color: var(--text);
@@ -1136,7 +1136,7 @@ header {
   line-height: 1.4;
 }
 
-/* Modal Title & Subtitle Styling */
+
 .modal-title {
   font-size: 20px;
   font-weight: 700;
