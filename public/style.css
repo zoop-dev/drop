@@ -6,10 +6,13 @@
   --blue: #00c8ff;
   --blue-dim: rgba(0, 200, 255, 0.08);
   --blue-glow: rgba(0, 200, 255, 0.25);
+  --blue-glow-strong: rgba(0, 200, 255, 0.4);
   --text: #dde4ff;
   --muted: #5a6080;
   --danger: #ff4466;
   --green: #22cc66;
+  --toggle-track: rgba(255, 255, 255, 0.1);
+  --title-gradient: linear-gradient(135deg, #ffffff 40%, #00c8ff 100%);
 }
 
 [data-theme="light"] {
@@ -20,10 +23,13 @@
   --blue: #0066ff;
   --blue-dim: rgba(0, 102, 255, 0.08);
   --blue-glow: rgba(0, 102, 255, 0.15);
+  --blue-glow-strong: rgba(0, 102, 255, 0.35);
   --text: #0f172a;
   --muted: #64748b;
   --danger: #e11d48;
   --green: #10b981;
+  --toggle-track: rgba(0, 0, 0, 0.1);
+  --title-gradient: linear-gradient(135deg, #0f172a 40%, #0066ff 100%);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -62,13 +68,13 @@ header {
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 20px;
-  background: var(--card-bg);
+  background: var(--card);
   border: 1px solid var(--border);
   transition: all 0.2s ease;
 }
 .version-badge:hover {
   color: var(--blue);
-  border-color: rgba(0, 200, 255, 0.4);
+  border-color: var(--blue-glow-strong);
   background: var(--blue-dim);
 }
 
@@ -154,7 +160,7 @@ header {
   letter-spacing: -1.5px;
   line-height: 1.05;
   margin-bottom: 32px;
-  background: linear-gradient(135deg, #ffffff 40%, #00c8ff 100%);
+  background: var(--title-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -177,12 +183,12 @@ header {
 .btn-primary {
   background: var(--blue);
   color: #000;
-  box-shadow: 0 4px 14px rgba(0, 200, 255, 0.3);
+  box-shadow: 0 4px 14px var(--blue-glow);
 }
 .btn-primary:hover {
   filter: brightness(1.1);
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(0, 200, 255, 0.45);
+  box-shadow: 0 6px 20px var(--blue-glow-strong);
 }
 .btn-secondary {
   background: var(--card);
@@ -194,7 +200,7 @@ header {
   border-color: var(--blue);
   color: var(--blue);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(0, 200, 255, 0.1);
+  box-shadow: 0 6px 16px var(--blue-dim);
 }
 
 
@@ -236,7 +242,7 @@ header {
   letter-spacing: 6px;
   color: var(--blue);
   margin-bottom: 20px;
-  text-shadow: 0 0 16px rgba(0, 200, 255, 0.35);
+  text-shadow: 0 0 16px var(--blue-glow);
 }
 .qr-container {
   display: flex;
@@ -267,7 +273,7 @@ header {
 .copy-btn:hover {
   background: var(--blue);
   color: #000;
-  box-shadow: 0 4px 12px rgba(0, 200, 255, 0.2);
+  box-shadow: 0 4px 12px var(--blue-glow);
 }
 .copy-btn:active {
   transform: scale(0.97);
@@ -329,11 +335,11 @@ header {
   position: relative;
   background: rgba(0, 200, 255, 0.01);
 }
-.drop-zone.has-peers { border-color: rgba(0, 200, 255, 0.35); background: rgba(0, 200, 255, 0.02); }
+.drop-zone.has-peers { border-color: var(--blue-glow-strong); background: var(--blue-dim); }
 .drop-zone.has-peers:hover, .drop-zone.dragging {
   background: var(--blue-dim);
   border-color: var(--blue);
-  box-shadow: 0 0 20px rgba(0, 200, 255, 0.1);
+  box-shadow: 0 0 20px var(--blue-glow);
 }
 .drop-zone.disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 .drop-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.7; color: var(--blue); transition: transform 0.2s ease; }
@@ -397,7 +403,7 @@ header {
 .transfer-error { color: var(--danger); }
 
 .batch-done {
-  border-color: rgba(0, 200, 255, 0.3);
+  border-color: var(--blue-glow);
   background: var(--blue-dim);
 }
 
@@ -533,7 +539,7 @@ header {
 }
 .nickname-input:focus {
   border-color: var(--blue);
-  box-shadow: 0 0 16px rgba(0, 200, 255, 0.15), 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 16px var(--blue-dim), 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 .nickname-input::placeholder { color: var(--muted); font-weight: 400; }
 
@@ -569,11 +575,11 @@ header {
   background: var(--blue);
   color: #000;
   border-color: var(--blue);
-  box-shadow: 0 4px 14px rgba(0, 200, 255, 0.25);
+  box-shadow: 0 4px 14px var(--blue-glow);
 }
 .btn-public.active:hover {
   filter: brightness(1.1);
-  box-shadow: 0 6px 18px rgba(0, 200, 255, 0.4);
+  box-shadow: 0 6px 18px var(--blue-glow-strong);
 }
 
 #lobby-section { margin-bottom: 20px; }
@@ -591,7 +597,7 @@ header {
 }
 .lobby-peer-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 
-.lobby-peer-card.nearby { border-color: rgba(0, 200, 255, 0.4); background: var(--blue-dim); }
+.lobby-peer-card.nearby { border-color: var(--blue-glow-strong); background: var(--blue-dim); }
 
 .nearby-badge {
   font-size: 10px;
@@ -599,8 +605,8 @@ header {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--blue);
-  background: rgba(0, 200, 255, 0.15);
-  border: 1px solid rgba(0, 200, 255, 0.3);
+  background: var(--blue-dim);
+  border: 1px solid var(--blue-glow);
   border-radius: 4px;
   padding: 2px 6px;
 }
@@ -627,8 +633,8 @@ header {
 .family-chip.family-v4,
 .family-chip.family-v6 {
   color: var(--blue);
-  border-color: rgba(0, 200, 255, 0.3);
-  background: rgba(0, 200, 255, 0.08);
+  border-color: var(--blue-glow);
+  background: var(--blue-dim);
 }
 .family-chip.family-none {
   color: var(--muted);
@@ -653,7 +659,7 @@ header {
 .lobby-family-chip.family-v4,
 .lobby-family-chip.family-v6 {
   color: var(--blue);
-  border-color: rgba(0, 200, 255, 0.3);
+  border-color: var(--blue-glow);
 }
 .lobby-family-chip.family-none {
   color: var(--muted);
@@ -672,7 +678,7 @@ header {
   display: flex;
   align-items: center;
   gap: 12px;
-  box-shadow: 0 4px 24px rgba(0, 200, 255, 0.2);
+  box-shadow: 0 4px 24px var(--blue-glow);
   z-index: 200;
   white-space: nowrap;
   font-size: 14px;
@@ -745,7 +751,7 @@ header {
 }
 .text-input:focus {
   border-color: var(--blue);
-  box-shadow: 0 0 12px rgba(0, 200, 255, 0.1), 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0 12px var(--blue-dim), 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 .text-input::placeholder { color: var(--muted); }
 
@@ -764,7 +770,7 @@ header {
 .btn-send-text:hover {
   background: var(--blue);
   color: #000;
-  box-shadow: 0 4px 12px rgba(0, 200, 255, 0.2);
+  box-shadow: 0 4px 12px var(--blue-glow);
 }
 .btn-send-text:active {
   transform: scale(0.97);
@@ -846,7 +852,7 @@ header {
   display: block;
   width: 38px;
   height: 22px;
-  background: rgba(255,255,255,0.1);
+  background: var(--toggle-track);
   border-radius: 11px;
   transition: background 0.2s;
   position: relative;
@@ -956,13 +962,12 @@ header {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: rgba(0, 200, 255, 0.03);
-  border: 1px solid rgba(0, 200, 255, 0.15);
+  background: var(--blue-dim);
+  border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 16px;
-  box-shadow: 0 0 20px rgba(0, 200, 255, 0.03);
   color: var(--blue);
   transition: all 0.3s ease;
 }
@@ -1064,8 +1069,8 @@ header {
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 15px rgba(0, 200, 255, 0.05); border-color: rgba(0, 200, 255, 0.2); }
-  50% { box-shadow: 0 0 25px rgba(0, 200, 255, 0.15); border-color: rgba(0, 200, 255, 0.4); }
+  0%, 100% { box-shadow: 0 0 15px var(--blue-dim); border-color: var(--blue-glow); }
+  50% { box-shadow: 0 0 25px var(--blue-glow); border-color: var(--blue-glow-strong); }
 }
 
 
@@ -1109,32 +1114,6 @@ header {
 }
 
 
-.tippy-box[data-theme~="drop"] {
-  background-color: var(--card);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
-  font-weight: 500;
-  box-shadow: 0 4px 20px rgba(0, 200, 255, 0.15);
-  padding: 4px 6px;
-}
-.tippy-box[data-theme~="drop"][data-placement^="top"] > .tippy-arrow::before {
-  border-top-color: var(--card);
-}
-.tippy-box[data-theme~="drop"][data-placement^="bottom"] > .tippy-arrow::before {
-  border-bottom-color: var(--card);
-}
-.tippy-box[data-theme~="drop"][data-placement^="left"] > .tippy-arrow::before {
-  border-left-color: var(--card);
-}
-.tippy-box[data-theme~="drop"][data-placement^="right"] > .tippy-arrow::before {
-  border-right-color: var(--card);
-}
-.tippy-content {
-  line-height: 1.4;
-}
 
 
 .modal-title {
@@ -1155,7 +1134,7 @@ header {
 #share-drop-zone.dragging {
   background: var(--blue-dim);
   border-color: var(--blue);
-  box-shadow: 0 0 20px rgba(0, 200, 255, 0.1);
+  box-shadow: 0 0 20px var(--blue-glow);
 }
 
 .browse-link {
