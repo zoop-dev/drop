@@ -1,6 +1,12 @@
-const APP_VERSION = 'v37';
+const APP_VERSION = 'v38';
 
 const CHANGELOG = [
+  {
+    version: 'v38',
+    changes: [
+      'fix duplicate transfer items when receiving with auto-accept'
+    ]
+  },
   {
     version: 'v37',
     changes: [

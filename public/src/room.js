@@ -719,7 +719,7 @@ async function handleBinaryMessage(buffer) {
   if (!state.decryptKeys[fileId]) return;
   if (isFirst && !state.recvState[fileId]) {
     state.recvState[fileId] = { name: meta.filename, size: meta.size, mimeType: meta.mimeType, compressed, chunks: [], received: 0, total };
-    if (!state.fileBatch[fileId]) {
+    if (!state.fileBatch[fileId] && !document.getElementById('transfer-' + fileId)) {
       addTransferItem(fileId, meta.filename, meta.size, 'recv', state.peers[from]?.name ?? from);
     }
   }
