@@ -1,6 +1,14 @@
-const APP_VERSION = 'v38';
+const APP_VERSION = 'v39';
 
 const CHANGELOG = [
+  {
+    version: 'v39',
+    changes: [
+      'fix auto-accept silently failing (transfer stuck at "Waiting for acceptance...")',
+      'fix duplicate room creation when clicking Create room',
+      'fix files sending twice on paste'
+    ]
+  },
   {
     version: 'v38',
     changes: [

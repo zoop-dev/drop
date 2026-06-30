@@ -938,65 +938,6 @@ folderInput.addEventListener('change', async () => {
   folderInput.value = '';
 });
 
-document.addEventListener('paste', e => {
-  if (!state.roomCode) return;
-  if (e.target.matches('input, textarea, [contenteditable]')) return;
-  const items = Array.from(e.clipboardData.items);
-  const files = items.filter(it => it.kind === 'file').map(it => it.getAsFile()).filter(Boolean);
-  if (files.length) { e.preventDefault(); queueFiles(files); return; }
-  const textItem = items.find(it => it.kind === 'string' && it.type === 'text/plain');
-  if (textItem && Object.keys(state.peers).length) {
-    e.preventDefault();
-    textItem.getAsString(text => { if (text.trim()) sendText(text.trim()); });
-  }
-});
-
-function requireNick() {
-  const nick = nicknameInput.value.trim();
-  if (!nick) {
-    nicknameInput.focus();
-    nicknameInput.style.borderColor = 'var(--danger)';
-    setTimeout(() => { nicknameInput.style.borderColor = ''; }, 1200);
-    return false;
-  }
-  return true;
-}
-
-document.getElementById('btn-create').addEventListener('click', async () => {
-  if (!requireNick()) return;
-  const { code } = await fetch('/api/room', { method: 'POST' }).then(r => r.json());
-  await enterRoom(code, true);
-});
-document.getElementById('btn-join-show').addEventListener('click', () => {
-  if (!requireNick()) return;
-  showView('join');
-});
-document.getElementById('btn-join').addEventListener('click', () => {
-  const code = document.getElementById('code-input').value.trim().toUpperCase();
-  if (code.length === 6) enterRoom(code, false);
-});
-document.getElementById('code-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('btn-join').click();
-});
-
-document.getElementById('back-btn').addEventListener('click', () => {
-  if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(1000); }
-  Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, fileBatch: {}, batchRecvState: {}, sendQueue: [], cancelledTransfers: new Set(), mySubnet: null, myV6: null, myAddressFamily: null, myPubHash: null, lobby: null, lobbyId: null, lobbyPeers: {} });
-  connectedResolve = null; connectedPromise = null;
-  const list = document.getElementById('peers-list');
-  list.innerHTML = '';
-  list.appendChild(noPeersEl);
-  document.getElementById('room-code-section').style.display = 'none';
-  document.getElementById('transfers').innerHTML = '';
-  document.getElementById('code-input').value = '';
-  document.getElementById('overlay').classList.add('hidden');
-  document.getElementById('lobby-overlay').classList.add('hidden');
-  setDropEnabled(false);
-  sessionStorage.removeItem('drop-room');
-  sessionStorage.removeItem('drop-creator');
-  history.pushState({}, '', '/');
-  showView('home');
-});
 
 const nicknameInput = document.getElementById('nickname-input');
 nicknameInput.value = localStorage.getItem(SAVED_NICKNAME_KEY) || '';
@@ -1013,27 +954,38 @@ autoAcceptToggle.addEventListener('change', () => {
 
 async function autoAcceptRequest(msg) {
   const peerName = state.peers[msg.from]?.name ?? msg.from;
-  if (msg.type === 'batch-request') {
-    const keys = await Promise.all(msg.files.map(f => importKey(f.key)));
-    state.batchRecvState[msg.batchId] = {
-      total: msg.files.length,
-      blobs: [],
-      sizes: {},
-      filenames: {},
-      totalSize: msg.totalSize
-    };
-    msg.files.forEach((f, i) => {
-      state.decryptKeys[f.fileId] = keys[i];
-      state.fileBatch[f.fileId] = msg.batchId;
-      state.batchRecvState[msg.batchId].sizes[f.fileId] = f.size;
-      state.batchRecvState[msg.batchId].filenames[f.fileId] = f.filename;
-    });
-    addBatchTransferItem(msg.batchId, msg.files.length, msg.totalSize, 'recv', peerName);
-    send({ type: 'batch-accept', to: msg.from, batchId: msg.batchId });
-  } else {
-    state.decryptKeys[msg.fileId] = await importKey(msg.key);
-    addTransferItem(msg.fileId, msg.filename, msg.size, 'recv', peerName);
-    send({ type: 'transfer-accept', to: msg.from, fileId: msg.fileId });
+  try {
+    if (msg.type === 'batch-request') {
+      const keys = await Promise.all(msg.files.map(f => importKey(f.key)));
+      state.batchRecvState[msg.batchId] = {
+        total: msg.files.length,
+        blobs: [],
+        sizes: {},
+        filenames: {},
+        totalSize: msg.totalSize
+      };
+      msg.files.forEach((f, i) => {
+        state.decryptKeys[f.fileId] = keys[i];
+        state.fileBatch[f.fileId] = msg.batchId;
+        state.batchRecvState[msg.batchId].sizes[f.fileId] = f.size;
+        state.batchRecvState[msg.batchId].filenames[f.fileId] = f.filename;
+      });
+      addBatchTransferItem(msg.batchId, msg.files.length, msg.totalSize, 'recv', peerName);
+      await waitConnected();
+      send({ type: 'batch-accept', to: msg.from, batchId: msg.batchId });
+    } else {
+      state.decryptKeys[msg.fileId] = await importKey(msg.key);
+      addTransferItem(msg.fileId, msg.filename, msg.size, 'recv', peerName);
+      await waitConnected();
+      send({ type: 'transfer-accept', to: msg.from, fileId: msg.fileId });
+    }
+  } catch {
+    if (msg.type !== 'batch-request') {
+      delete state.decryptKeys[msg.fileId];
+      document.getElementById('transfer-' + msg.fileId)?.remove();
+    }
+    state.requestQueue.push(msg);
+    if (!state.activeRequest) drainRequestQueue();
   }
 }
 
