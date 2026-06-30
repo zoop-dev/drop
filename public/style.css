@@ -1116,6 +1116,23 @@ header {
 
 
 
+.tippy-box[data-theme~="drop"] {
+  background-color: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 20px var(--blue-glow);
+  padding: 4px 6px;
+}
+.tippy-box[data-theme~="drop"][data-placement^="top"] > .tippy-arrow::before { border-top-color: var(--card); }
+.tippy-box[data-theme~="drop"][data-placement^="bottom"] > .tippy-arrow::before { border-bottom-color: var(--card); }
+.tippy-box[data-theme~="drop"][data-placement^="left"] > .tippy-arrow::before { border-left-color: var(--card); }
+.tippy-box[data-theme~="drop"][data-placement^="right"] > .tippy-arrow::before { border-right-color: var(--card); }
+.tippy-content { line-height: 1.4; }
+
 .modal-title {
   font-size: 20px;
   font-weight: 700;
