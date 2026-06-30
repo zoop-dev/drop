@@ -9,12 +9,32 @@
 <meta name="theme-color" content="#00c8ff">
 <link rel="apple-touch-icon" href="/favicon.svg">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<script src="/jszip.min.js"></script>
 </head>
 <body>
 <header>
   <span class="logo">drop</span>
   <div class="header-right">
-    <span class="version-badge">v30</span>
+    <label class="theme-switch" title="Toggle theme">
+      <input type="checkbox" id="theme-toggle-checkbox" role="switch" aria-label="Toggle light and dark theme">
+      <div class="slider">
+        <svg class="sun-icon-switch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <svg class="moon-icon-switch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </div>
+    </label>
+    <span class="version-badge" id="version-badge"></span>
     <button class="back-btn hidden" id="back-btn">leave room</button>
   </div>
 </header>
@@ -35,7 +55,6 @@
     <div class="lobby-bar">
       <button class="btn-public" id="btn-go-public">Go public</button>
       <button class="btn-share-link" id="btn-create-share">Share a file link</button>
-      <input type="file" id="share-file-input" style="display:none">
     </div>
 
     <div id="lobby-section" class="hidden">
@@ -80,9 +99,10 @@
 
     <div class="drop-zone disabled" id="drop-zone">
       <div class="drop-icon">&#8679;</div>
-      <div class="drop-title">Drop files to send</div>
+      <div class="drop-title">Drop files or folders to send</div>
       <div class="drop-sub" id="drop-sub">Connect a device first</div>
-      <input type="file" id="file-input" multiple>
+      <input type="file" id="file-input" multiple style="display:none">
+      <input type="file" id="folder-input" multiple webkitdirectory directory style="display:none">
     </div>
 
     <div class="text-send-bar" id="text-send-bar">
@@ -94,21 +114,42 @@
   </div>
 
   <div class="view" id="view-share">
-    <div class="share-receive-card" id="share-receive-card">
-      <div class="share-receive-icon">&#8659;</div>
-      <div class="share-receive-name" id="share-receive-name">Loading...</div>
-      <div class="share-receive-meta" id="share-receive-meta"></div>
-      <div class="share-receive-note">This link can only be opened once</div>
-      <button class="btn btn-primary" id="btn-share-download">Download</button>
+    <div class="share-card" id="share-card">
+      <div class="share-header">
+        <div class="share-icon-wrapper loading" id="share-icon-wrapper">
+          <svg class="share-icon" id="share-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="2" x2="12" y2="6"></line>
+            <line x1="12" y1="18" x2="12" y2="22"></line>
+            <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+            <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+            <line x1="2" y1="12" x2="6" y2="12"></line>
+            <line x1="18" y1="12" x2="22" y2="12"></line>
+            <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
+            <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+          </svg>
+        </div>
+        <div class="share-label" id="share-card-label">Shared File</div>
+      </div>
+
+      <div class="share-body">
+        <div class="share-receive-name" id="share-receive-name">Loading file details...</div>
+        <div class="share-receive-meta" id="share-receive-meta"></div>
+        <div class="share-receive-note" id="share-receive-note" style="display:none"></div>
+      </div>
+
+      <div class="share-footer">
+        <button class="btn btn-primary" id="btn-share-download" style="display:none">Download File</button>
+        <button class="btn btn-secondary" id="btn-share-home" style="display:none">Go to Homepage</button>
+      </div>
     </div>
   </div>
 </main>
 
 <div class="overlay hidden" id="overlay">
   <div class="request-card">
-    <div class="request-from">Incoming from <strong id="req-from"></strong></div>
-    <div class="request-filename" id="req-filename"></div>
-    <div class="request-filesize" id="req-filesize"></div>
+    <div class="request-from" id="req-desc"></div>
+    <div class="request-filename" id="req-details"></div>
+    <span class="req-badge hidden" id="req-badge" style="display:none;font-size:11px;color:var(--muted);margin-bottom:8px;display:block"></span>
     <div class="request-actions">
       <button class="btn-accept" id="btn-accept">Accept</button>
       <button class="btn-decline" id="btn-decline">Decline</button>
@@ -128,15 +169,57 @@
 </div>
 
 <div class="overlay hidden" id="share-create-overlay">
-  <div class="request-card">
-    <div class="request-from" id="share-upload-status">Encrypting...</div>
-    <div class="request-filename" id="share-upload-filename"></div>
-    <div class="share-link-box hidden" id="share-link-box">
-      <input class="share-link-input" id="share-link-input" readonly>
-      <button class="btn-copy-share" id="btn-copy-share">Copy</button>
+  <div class="request-card share-upload-card" id="share-upload-card" style="max-width: 440px;">
+    <div id="share-drop-zone-container">
+      <div class="modal-title">Share a file link</div>
+      <div class="modal-subtitle">Generate a secure, single-use download link</div>
+      <div class="drop-zone" id="share-drop-zone" style="margin-bottom: 0;">
+        <div class="drop-icon" style="color: var(--blue);">&#8679;</div>
+        <div class="drop-title">Drag & drop files or folders here</div>
+        <div class="drop-sub" id="share-drop-sub">
+          or click to browse <button class="browse-link" id="btn-share-browse-folder">folders</button>
+        </div>
+        <input type="file" id="share-file-input" style="display:none">
+        <input type="file" id="share-folder-input" webkitdirectory directory style="display:none">
+      </div>
     </div>
+
+    <div id="share-upload-progress-container" style="display:none">
+      <div class="modal-title" id="share-upload-status" style="margin-bottom: 12px;">Encrypting...</div>
+
+      <div class="share-rename-section hidden" id="share-rename-section" style="margin-bottom: 20px; width: 100%;">
+        <div class="section-label" style="text-align: left; margin-bottom: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted);">File Name</div>
+        <div class="rename-input-row" style="display: flex; gap: 8px; width: 100%;">
+          <input class="text-input" id="share-rename-input" placeholder="file name" maxlength="100" style="padding: 10px 14px; margin-bottom: 0; font-size: 13px; border-radius: 10px; width: 100%;">
+          <button class="btn btn-secondary" id="btn-share-rename" style="padding: 10px 16px; font-size: 13px; font-weight: 700; border-radius: 10px; width: auto; flex: none; cursor: pointer;">Rename</button>
+        </div>
+        <div class="rename-status" id="share-rename-status" style="font-size: 11px; text-align: left; margin-top: 6px; min-height: 15px;"></div>
+      </div>
+
+      <div class="request-filename" id="share-upload-filename" style="margin-bottom: 20px; font-weight: 700; word-break: break-all;"></div>
+
+      <div class="share-link-box hidden" id="share-link-box" style="margin-bottom: 0;">
+        <input class="share-link-input" id="share-link-input" readonly>
+        <button class="btn-copy-share" id="btn-copy-share">Copy</button>
+      </div>
+    </div>
+
+    <div class="request-actions" style="margin-top: 24px;">
+      <button class="btn-decline" id="btn-share-close" style="width: 100%;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="changelog-overlay">
+  <div class="request-card changelog-card" style="max-width: 440px;">
+    <div class="modal-title" style="margin-bottom: 8px;">What's New in Drop</div>
+    <div class="modal-subtitle" style="margin-bottom: 20px;">Recent updates and improvements</div>
+
+    <div class="changelog-list" id="changelog-list" style="text-align: left; max-height: 280px; overflow-y: auto; margin-bottom: 24px; padding-right: 8px;">
+    </div>
+
     <div class="request-actions">
-      <button class="btn-decline" id="btn-share-close">Close</button>
+      <button class="btn btn-primary" id="btn-changelog-close" style="width: 100%;">Got it</button>
     </div>
   </div>
 </div>
@@ -154,6 +237,14 @@
 </div>
 
 <script src="/qrlib.js"></script>
-<script src="/app.js"></script>
+<script src="/src/vars.js"></script>
+<script src="https://zo0p.dev/badge.js?pos=bl&animate=no"></script>
+<script src="/src/utils.js"></script>
+<script src="/src/crypto.js"></script>
+<script src="/src/state.js"></script>
+<script src="/src/room.js"></script>
+<script src="/src/lobby.js"></script>
+<script src="/src/share.js"></script>
+<script src="/src/app.js"></script>
 </body>
 </html>

@@ -16,20 +16,21 @@ export class TransferRoom extends DurableObject<Env> {
     const url = new URL(request.url);
     const peerId = crypto.randomUUID();
     const deviceName = url.searchParams.get("name") ?? "Device";
+    const uaInfo = url.searchParams.get("ua") ?? "";
 
     const { 0: client, 1: server } = new WebSocketPair();
-    this.ctx.acceptWebSocket(server, [peerId, deviceName]);
+    this.ctx.acceptWebSocket(server, [peerId, deviceName, uaInfo]);
 
     const existingPeers = this.ctx
       .getWebSockets()
       .filter((ws) => ws !== server)
-      .map((ws) => { const [id, name] = this.ctx.getTags(ws); return { id, name }; });
+      .map((ws) => { const [id, name, ua] = this.ctx.getTags(ws); return { id, name, ua }; });
 
     server.send(JSON.stringify({ type: "welcome", peerId, peers: existingPeers }));
 
     for (const ws of this.ctx.getWebSockets()) {
       if (ws !== server) {
-        ws.send(JSON.stringify({ type: "peer-joined", peerId, name: deviceName }));
+        ws.send(JSON.stringify({ type: "peer-joined", peerId, name: deviceName, ua: uaInfo }));
       }
     }
 
@@ -177,6 +178,15 @@ export default {
 
     const shareGetMatch = url.pathname.match(/^\/api\/share\/([A-Za-z0-9_-]{10,16})$/);
     if (shareGetMatch) {
+      if (request.method === "PATCH") {
+        const { filename } = await request.json() as { filename?: string };
+        if (!filename || typeof filename !== "string") return new Response("Bad request", { status: 400 });
+        const result = await env.DB.prepare(
+          "UPDATE shares SET filename = ? WHERE id = ? AND expires_at > ?"
+        ).bind(filename.slice(0, 255), shareGetMatch[1], Date.now()).run();
+        if (!result.meta.changes) return new Response("Not found or expired", { status: 404 });
+        return Response.json({ ok: true });
+      }
       const row = await env.DB.prepare(
         "SELECT data, iv, mime, filename, size FROM shares WHERE id = ? AND expires_at > ?"
       ).bind(shareGetMatch[1], Date.now()).first();
