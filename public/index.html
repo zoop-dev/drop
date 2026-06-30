@@ -16,7 +16,7 @@
 <header>
   <span class="logo">drop</span>
   <div class="header-right">
-    <label class="theme-switch" title="Toggle theme">
+    <label class="theme-switch" title="Toggle light / dark theme">
       <input type="checkbox" id="theme-toggle-checkbox" role="switch" aria-label="Toggle light and dark theme">
       <div class="slider">
         <svg class="sun-icon-switch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -49,13 +49,13 @@
     </div>
 
     <div class="btn-row">
-      <button class="btn btn-primary" id="btn-create">Create room</button>
-      <button class="btn btn-secondary" id="btn-join-show">Join room</button>
+      <button class="btn btn-primary" id="btn-create" title="Create a private room to send files directly to another device">Create room</button>
+      <button class="btn btn-secondary" id="btn-join-show" title="Join an existing room using a 6-character code or QR scan">Join room</button>
     </div>
 
     <div class="lobby-bar">
-      <button class="btn-public" id="btn-go-public">Go public</button>
-      <button class="btn-share-link" id="btn-create-share">Share a file link</button>
+      <button class="btn-public" id="btn-go-public" title="Make yourself visible to nearby devices on the same network">Go public</button>
+      <button class="btn-share-link" id="btn-create-share" title="Upload an encrypted file and generate a secure one-time download link">Share a file link</button>
     </div>
 
     <div id="lobby-section" class="hidden">
@@ -71,7 +71,7 @@
       <input class="code-input" id="code-input" maxlength="6" placeholder="XXXXXX" autocomplete="off" spellcheck="false">
       <div class="btn-row">
         <button class="btn btn-primary" id="btn-join">Join</button>
-        <button class="btn btn-secondary" id="btn-scan-qr">Scan QR</button>
+        <button class="btn btn-secondary" id="btn-scan-qr" title="Scan a QR code to join a room instantly">Scan QR</button>
       </div>
     </div>
   </div>
@@ -81,7 +81,7 @@
       <div class="room-label">Room code</div>
       <div class="room-code" id="room-code-text"></div>
       <div class="qr-container"><canvas id="qr-canvas"></canvas></div>
-      <button class="copy-btn" id="copy-btn">Copy link</button>
+      <button class="copy-btn" id="copy-btn" title="Copy the join link to share with others">Copy link</button>
     </div>
 
     <div class="peers-section">
@@ -89,7 +89,7 @@
       <div class="peers-list" id="peers-list">
         <div class="no-peers" id="no-peers">Waiting for others to join...</div>
       </div>
-      <label class="auto-accept-row" id="auto-accept-row">
+      <label class="auto-accept-row" id="auto-accept-row" title="Automatically accept all incoming transfers without prompting">
         <span class="auto-accept-label">Auto-accept from connected devices</span>
         <span class="toggle-track" id="toggle-track">
           <input type="checkbox" id="auto-accept-toggle" class="toggle-input">
@@ -108,7 +108,7 @@
 
     <div class="text-send-bar" id="text-send-bar">
       <input class="text-input" id="text-input" placeholder="Send a message or text snippet..." autocomplete="off">
-      <button class="btn-send-text" id="btn-send-text">Send</button>
+      <button class="btn-send-text" id="btn-send-text" title="Send text to all connected devices (or paste with Ctrl+V)">Send</button>
     </div>
 
     <div class="transfers" id="transfers"></div>
