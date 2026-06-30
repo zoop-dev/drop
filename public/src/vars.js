@@ -1,6 +1,14 @@
-const APP_VERSION = 'v31';
+const APP_VERSION = 'v37';
 
 const CHANGELOG = [
+  {
+    version: 'v37',
+    changes: [
+      'light mode fixes across all components',
+      'tippy tooltips on all buttons',
+      'zoop badge'
+    ]
+  },
   {
     version: 'v31',
     changes: [

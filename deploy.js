@@ -8,9 +8,9 @@ const root = __dirname;
 const count = parseInt(execSync('git rev-list --count HEAD', { cwd: root }).toString().trim()) + 1;
 const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '') + count;
 
-const htmlPath = path.join(root, 'public/index.html');
-fs.writeFileSync(htmlPath, fs.readFileSync(htmlPath, 'utf8')
-  .replace(/<span class="version-badge">v\d+<\/span>/, `<span class="version-badge">v${count}</span>`));
+const varsPath = path.join(root, 'public/src/vars.js');
+fs.writeFileSync(varsPath, fs.readFileSync(varsPath, 'utf8')
+  .replace(/const APP_VERSION = 'v\d+';/, `const APP_VERSION = 'v${count}';`));
 
 const swPath = path.join(root, 'public/sw.js');
 fs.writeFileSync(swPath, fs.readFileSync(swPath, 'utf8')
