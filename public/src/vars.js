@@ -1,4 +1,4 @@
-const APP_VERSION = 'v39';
+const APP_VERSION = 'v40';
 
 const CHANGELOG = [
   {
