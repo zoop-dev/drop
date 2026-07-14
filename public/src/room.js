@@ -345,6 +345,15 @@ function updateProgress(fileId, pct, statusText) {
   el.querySelector('.pct-text').textContent = pct < 100 ? Math.round(pct) + '%' : '';
 }
 
+function setTransferStats(fileId, totalSecs, avgBps) {
+  const el = document.getElementById('transfer-' + fileId);
+  if (!el) return;
+  const stats = document.createElement('div');
+  stats.className = 'transfer-stats';
+  stats.textContent = fmtETA(totalSecs) + ' · ' + fmtSpeed(avgBps);
+  el.querySelector('.progress-bar').after(stats);
+}
+
 function markTransferStatus(fileId, label, cls) {
   const entry = state.sendQueue.find(e => e.fileId === fileId);
   const batchId = entry?.batchId;
@@ -652,6 +661,9 @@ async function startSendingFile(fromPeerId, fileId, fromChunk = 0) {
         fmtSpeed(speed) + (eta > 1 ? ` · ${fmtETA(eta)}` : ''));
       await new Promise(r => setTimeout(r, 0));
     }
+    const totalElapsed = (Date.now() - startTime) / 1000 || 0.001;
+    const bytesSent = totalBytes - fromChunk * CHUNK_SIZE;
+    setTransferStats(fileId, totalElapsed, bytesSent / totalElapsed);
     send({ type: 'transfer-complete', to: fromPeerId, fileId });
     markTransferStatus(fileId, 'Sent', 'transfer-done');
     entry.srcBuf = null;
@@ -782,6 +794,8 @@ async function handleBinaryMessage(buffer) {
       } else {
         blob = new Blob(ordered.map(c => new Uint8Array(c)), { type: recv.mimeType });
       }
+      const recvElapsedTotal = (Date.now() - recv.startTime) / 1000 || 0.001;
+      setTransferStats(fileId, recvElapsedTotal, recv.size / recvElapsedTotal);
       markTransferReceived(fileId, recv.name, URL.createObjectURL(blob), recv.mimeType);
       delete state.recvState[fileId];
       delete state.decryptKeys[fileId];

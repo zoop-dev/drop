@@ -1,6 +1,12 @@
-const APP_VERSION = 'v45';
+const APP_VERSION = 'v46';
 
 const CHANGELOG = [
+  {
+    version: 'v46',
+    changes: [
+      'show transfer duration and average speed after send/receive completes'
+    ]
+  },
   {
     version: 'v45',
     changes: [
