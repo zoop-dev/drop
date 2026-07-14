@@ -21,14 +21,6 @@ async function exportKey(key) {
 async function importKey(b64) {
   return crypto.subtle.importKey('raw', fromB64(b64), { name: 'AES-GCM' }, false, ['decrypt']);
 }
-async function encryptChunk(key, buffer) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, buffer);
-  return { iv: toB64(iv), data: toB64(encrypted) };
-}
-async function decryptChunk(key, ivB64, dataB64) {
-  return crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(ivB64) }, key, fromB64(dataB64));
-}
 
 const CHUNK_SIZE = 49152;
 const SAVED_NICKNAME_KEY = 'drop-nickname';

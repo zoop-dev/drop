@@ -19,6 +19,7 @@ async function connectLobby() {
 
   state.lobby.onmessage = (e) => handleLobbyMessage(JSON.parse(e.data));
   state.lobby.onclose = () => {
+    state.lobby = null;
     state.lobbyId = null;
     state.mySubnet = null;
     state.myV6 = null;
@@ -27,6 +28,7 @@ async function connectLobby() {
     state.lobbyPeers = {};
     renderLobbyPeers();
     document.getElementById('lobby-section').classList.add('hidden');
+    document.querySelectorAll('.nearby-toast').forEach(t => t.remove());
     document.getElementById('btn-go-public').textContent = 'Go public';
     document.getElementById('btn-go-public').classList.remove('active');
     nicknameInput.disabled = false;
@@ -48,6 +50,10 @@ function disconnectLobby() {
   renderLobbyPeers();
   document.getElementById('lobby-section').classList.add('hidden');
   document.querySelectorAll('.nearby-toast').forEach(t => t.remove());
+  const goPublicBtn = document.getElementById('btn-go-public');
+  goPublicBtn.textContent = 'Go public';
+  goPublicBtn.classList.remove('active');
+  nicknameInput.disabled = false;
 }
 
 function handleLobbyMessage(msg) {
@@ -76,7 +82,11 @@ function handleLobbyMessage(msg) {
       document.querySelectorAll(`.nearby-toast[data-peer-id="${msg.peerId}"]`).forEach(t => t.remove());
       break;
     case 'connect-request':
-      showLobbyConnectRequest(msg);
+      if (state.pendingLobbyConnect) {
+        state.lobby?.send(JSON.stringify({ type: 'connect-decline', to: msg.from }));
+      } else {
+        showLobbyConnectRequest(msg);
+      }
       break;
     case 'connect-accept':
       if (state.pendingLobbyConnect === msg.from) {
@@ -200,6 +210,7 @@ function showNearbyToast(peerId, nickname) {
 }
 
 function sendLobbyConnectRequest(peerId) {
+  if (!state.lobby || state.lobby.readyState !== WebSocket.OPEN) return;
   state.pendingLobbyConnect = peerId;
   state.lobby.send(JSON.stringify({ type: 'connect-request', to: peerId }));
   renderLobbyPeers();
@@ -216,7 +227,18 @@ document.getElementById('lobby-btn-accept').addEventListener('click', async () =
   const peerId = state.pendingLobbyConnect;
   if (!peerId) return;
   document.getElementById('lobby-overlay').classList.add('hidden');
-  const { code } = await fetch('/api/room', { method: 'POST' }).then(r => r.json());
+  let code;
+  try {
+    const res = await fetch('/api/room', { method: 'POST' });
+    code = (await res.json()).code;
+  } catch {
+    state.pendingLobbyConnect = null;
+    return;
+  }
+  if (!state.lobby || state.lobby.readyState !== WebSocket.OPEN) {
+    state.pendingLobbyConnect = null;
+    return;
+  }
   state.lobby.send(JSON.stringify({ type: 'connect-accept', to: peerId, roomCode: code }));
   state.pendingLobbyConnect = null;
   disconnectLobby();

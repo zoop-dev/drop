@@ -29,7 +29,8 @@ function connect(code) {
     if (e.code === 1000) return;
     state.reconnecting = true;
     renderPeers();
-    if (state.roomCode && document.visibilityState === 'visible') connect(state.roomCode);
+    if (state.roomCode && document.visibilityState === 'visible')
+      setTimeout(() => { if (state.roomCode) connect(state.roomCode); }, 1000);
   };
 }
 
@@ -61,7 +62,7 @@ async function handleMessage(msg) {
     case 'transfer-accept': startSendingFile(msg.from, msg.fileId, 0); break;
     case 'resume-request': {
       const resumeEntry = state.sendQueue.find(e => e.fileId === msg.fileId);
-      if (resumeEntry) startSendingFile(msg.from, msg.fileId, msg.received ?? 0);
+      if (resumeEntry && !resumeEntry.done) startSendingFile(msg.from, msg.fileId, msg.received ?? 0);
       break;
     }
     case 'batch-accept': startSendingBatch(msg.from, msg.batchId); break;
@@ -69,7 +70,6 @@ async function handleMessage(msg) {
     case 'batch-decline':
       state.sendQueue.filter(e => e.batchId === msg.batchId).forEach(e => markTransferStatus(e.fileId, 'Declined', 'transfer-error'));
       break;
-    case 'chunk': await receiveChunk(msg); break;
     case 'transfer-error': markTransferStatus(msg.fileId, 'Transfer failed', 'transfer-error'); break;
     case 'transfer-cancel':
       delete state.decryptKeys[msg.fileId];
@@ -564,37 +564,6 @@ function showRoomError(msg) {
   setDropEnabled(false);
 }
 
-async function receiveChunk(msg) {
-  const recv = state.recvState[msg.fileId];
-  if (!recv) return;
-  if (!state.decryptKeys[msg.fileId]) return;
-  let chunk;
-  try {
-    chunk = await decryptChunk(state.decryptKeys[msg.fileId], msg.iv, msg.data);
-  } catch { return; }
-  recv.chunks[msg.index] = chunk;
-  recv.received++;
-  updateProgress(msg.fileId, Math.min(99, (recv.received / recv.total) * 100), 'Receiving...');
-  if (recv.received >= recv.total) {
-    const ordered = Array.from({ length: recv.total }, (_, i) => recv.chunks[i]);
-    if (ordered.some(c => !c)) {
-      markTransferStatus(msg.fileId, 'Transfer incomplete — retry', 'transfer-error');
-      delete state.recvState[msg.fileId];
-      delete state.decryptKeys[msg.fileId];
-      return;
-    }
-    let blob;
-    if (recv.compressed) {
-      const combined = await new Blob(ordered.map(c => new Uint8Array(c))).arrayBuffer();
-      blob = new Blob([await decompressBuffer(combined)], { type: recv.mimeType });
-    } else {
-      blob = new Blob(ordered.map(c => new Uint8Array(c)), { type: recv.mimeType });
-    }
-    markTransferReceived(msg.fileId, recv.name, URL.createObjectURL(blob), recv.mimeType);
-    delete state.recvState[msg.fileId];
-    delete state.decryptKeys[msg.fileId];
-  }
-}
 
 async function queueFiles(files) {
   if (!Object.keys(state.peers).length) return;
@@ -607,7 +576,7 @@ async function queueFiles(files) {
       const fileId = crypto.randomUUID();
       const key = await generateKey();
       const keyB64 = await exportKey(key);
-      state.sendQueue.push({ file, fileId, key, batchId, pendingTargets: new Set(peerIds), prepared: false, srcBuf: null, compressed: false });
+      state.sendQueue.push({ file, fileId, key, batchId, pendingTargets: new Set(peerIds), prepared: false, srcBuf: null, compressed: false, done: false });
       batchEntries.push({ fileId, filename: file.name, size: file.size, mimeType: file.type || 'application/octet-stream', key: keyB64 });
     }
     const totalSize = files.reduce((s, f) => s + f.size, 0);
@@ -617,14 +586,14 @@ async function queueFiles(files) {
     });
   } else {
     const file = files[0];
-    const fileId = crypto.randomUUID();
-    const key = await generateKey();
-    const keyB64 = await exportKey(key);
-    state.sendQueue.push({ file, fileId, key, pendingTargets: new Set(peerIds), prepared: false, srcBuf: null, compressed: false });
-    peerIds.forEach(peerId => {
+    for (const peerId of peerIds) {
+      const fileId = crypto.randomUUID();
+      const key = await generateKey();
+      const keyB64 = await exportKey(key);
+      state.sendQueue.push({ file, fileId, key, pendingTargets: new Set([peerId]), prepared: false, srcBuf: null, compressed: false, done: false });
       send({ type: 'transfer-request', to: peerId, fileId, filename: file.name, size: file.size, mimeType: file.type || 'application/octet-stream', key: keyB64 });
       addTransferItem(fileId, file.name, file.size, 'send', state.peers[peerId]?.name ?? peerId);
-    });
+    }
   }
 }
 
@@ -684,9 +653,13 @@ async function startSendingFile(fromPeerId, fileId, fromChunk = 0) {
     }
     send({ type: 'transfer-complete', to: fromPeerId, fileId });
     markTransferStatus(fileId, 'Sent', 'transfer-done');
+    entry.srcBuf = null;
+    entry.done = true;
   } catch {
     send({ type: 'transfer-error', to: fromPeerId, fileId });
     markTransferStatus(fileId, 'Failed to send', 'transfer-error');
+    entry.srcBuf = null;
+    entry.done = true;
   }
 }
 
@@ -814,6 +787,8 @@ async function handleBinaryMessage(buffer) {
     }
   } catch {
     markTransferStatus(fileId, 'Decryption failed', 'transfer-error');
+    delete state.recvState[fileId];
+    delete state.decryptKeys[fileId];
   }
 }
 
@@ -1020,6 +995,7 @@ async function autoAcceptRequest(msg) {
   try {
     if (msg.type === 'batch-request') {
       const keys = await Promise.all(msg.files.map(f => importKey(f.key)));
+      if (!state.peers[msg.from]) return;
       state.batchRecvState[msg.batchId] = {
         total: msg.files.length,
         blobs: [],
@@ -1038,6 +1014,7 @@ async function autoAcceptRequest(msg) {
       send({ type: 'batch-accept', to: msg.from, batchId: msg.batchId });
     } else {
       state.decryptKeys[msg.fileId] = await importKey(msg.key);
+      if (!state.peers[msg.from]) { delete state.decryptKeys[msg.fileId]; return; }
       addTransferItem(msg.fileId, msg.filename, msg.size, 'recv', peerName);
       await waitConnected();
       send({ type: 'transfer-accept', to: msg.from, fileId: msg.fileId });
@@ -1096,6 +1073,7 @@ document.getElementById('btn-accept').addEventListener('click', async () => {
   
   if (msg.type === 'batch-request') {
     const keys = await Promise.all(msg.files.map(f => importKey(f.key)));
+    if (!state.peers[msg.from]) { state.activeRequest = null; drainRequestQueue(); return; }
     state.batchRecvState[msg.batchId] = {
       total: msg.files.length,
       blobs: [],
@@ -1113,10 +1091,11 @@ document.getElementById('btn-accept').addEventListener('click', async () => {
     send({ type: 'batch-accept', to: msg.from, batchId: msg.batchId });
   } else {
     state.decryptKeys[msg.fileId] = await importKey(msg.key);
+    if (!state.peers[msg.from]) { delete state.decryptKeys[msg.fileId]; state.activeRequest = null; drainRequestQueue(); return; }
     addTransferItem(msg.fileId, msg.filename, msg.size, 'recv', peerName);
     send({ type: 'transfer-accept', to: msg.from, fileId: msg.fileId });
   }
-  
+
   state.activeRequest = null;
   drainRequestQueue();
 });

@@ -116,11 +116,9 @@ shareDropZone.addEventListener('drop', async e => {
         
         try {
           const zipFile = await zipFolder(entry);
-          if (zipFile) {
-            createShareLink(zipFile);
-          } else {
-            throw new Error('Empty folder');
-          }
+          if (!zipFile) throw new Error('Empty folder');
+          if (zipFile.size > 5 * 1024 * 1024) throw new Error('File exceeds 5 MB limit for share links');
+          createShareLink(zipFile);
         } catch (err) {
           statusEl.textContent = 'Failed: ' + err.message;
           document.getElementById('btn-share-close').textContent = 'Close';
@@ -156,11 +154,10 @@ shareFolderInput.addEventListener('change', async () => {
     
     try {
       const filesToQueue = await processSelectedFiles(shareFolderInput.files);
-      if (filesToQueue.length) {
-        createShareLink(filesToQueue[0]);
-      } else {
-        throw new Error('Empty folder');
-      }
+      if (!filesToQueue.length) throw new Error('Empty folder');
+      const zipFile = filesToQueue[0];
+      if (zipFile.size > 5 * 1024 * 1024) throw new Error('File exceeds 5 MB limit for share links');
+      createShareLink(zipFile);
     } catch (err) {
       statusEl.textContent = 'Failed: ' + err.message;
       document.getElementById('btn-share-close').textContent = 'Close';

@@ -46,8 +46,9 @@ function fmtSpeed(bps) {
 }
 
 function fmtETA(secs) {
-  if (secs < 60) return Math.ceil(secs) + 's';
-  return Math.floor(secs / 60) + 'm ' + Math.ceil(secs % 60) + 's';
+  const t = Math.round(secs);
+  if (t < 60) return t + 's';
+  return Math.floor(t / 60) + 'm ' + (t % 60) + 's';
 }
 
 function ipv6Prefix(addr) {

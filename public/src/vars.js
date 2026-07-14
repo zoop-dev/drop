@@ -1,6 +1,22 @@
-const APP_VERSION = 'v42';
+const APP_VERSION = 'v43';
 
 const CHANGELOG = [
+  {
+    version: 'v43',
+    changes: [
+      'fix lobby crash when clicking Connect on a stale toast after disconnect',
+      'fix lobby accept crashing if connection drops during room creation',
+      'fix decryption failure leaving orphaned receive state that blocks future transfers',
+      'fix peer-gone race in Accept leaving a stuck "Receiving..." item with no cleanup',
+      'fix sending to multiple peers creating duplicate DOM IDs (broken progress)',
+      'fix lobby back→home leaving nickname input frozen',
+      'fix simultaneous lobby connect-requests clobbering each other',
+      'fix reconnect causing a tight retry loop on complete network loss (now 1s delay)',
+      'fix share folder upload bypassing 5 MB size guard',
+      'fix ETA display at segment boundaries (e.g. "60s" → "1m 0s")',
+      'free compressed send buffer from memory after transfer completes'
+    ]
+  },
   {
     version: 'v42',
     changes: [
