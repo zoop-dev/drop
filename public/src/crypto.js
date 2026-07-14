@@ -30,14 +30,16 @@ function isCompressible(mimeType, size) {
   const t = mimeType || '';
   if (t.startsWith('image/') || t.startsWith('video/') || t.startsWith('audio/')) return false;
   if (/zip|rar|7z|gz|bz2|xz|zst|br|lzma/.test(t)) return false;
+  if (t === 'application/pdf') return false;
   return true;
 }
 async function compressBuffer(buffer) {
   const cs = new CompressionStream('gzip');
   const w = cs.writable.getWriter();
+  const result = new Response(cs.readable).arrayBuffer();
   await w.write(new Uint8Array(buffer));
   await w.close();
-  return new Response(cs.readable).arrayBuffer();
+  return result;
 }
 async function decompressBuffer(buffer) {
   const ds = new DecompressionStream('gzip');

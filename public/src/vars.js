@@ -1,6 +1,13 @@
-const APP_VERSION = 'v44';
+const APP_VERSION = 'v45';
 
 const CHANGELOG = [
+  {
+    version: 'v45',
+    changes: [
+      'fix compression deadlock that caused large files to hang at "Compressing..."',
+      'skip compression for PDFs (already internally compressed)'
+    ]
+  },
   {
     version: 'v44',
     changes: [
