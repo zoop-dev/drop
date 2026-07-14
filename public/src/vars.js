@@ -1,6 +1,12 @@
-const APP_VERSION = 'v43';
+const APP_VERSION = 'v44';
 
 const CHANGELOG = [
+  {
+    version: 'v44',
+    changes: [
+      'show "Compressing..." status while preparing large files before send'
+    ]
+  },
   {
     version: 'v43',
     changes: [

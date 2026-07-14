@@ -612,6 +612,7 @@ async function startSendingFile(fromPeerId, fileId, fromChunk = 0) {
   // Compress once and cache in the entry so resumed sends use identical byte offsets
   if (!entry.prepared) {
     if (isCompressible(mimeType, file.size)) {
+      updateProgress(fileId, 0, 'Compressing...');
       try { entry.srcBuf = await compressBuffer(await file.arrayBuffer()); entry.compressed = true; } catch {}
     }
     entry.prepared = true;
