@@ -1,6 +1,13 @@
-const APP_VERSION = 'v41';
+const APP_VERSION = 'v42';
 
 const CHANGELOG = [
+  {
+    version: 'v42',
+    changes: [
+      'reconnect resilience: transfers resume automatically if either device briefly disconnects',
+      '7-second grace period before a dropped connection is treated as a failure'
+    ]
+  },
   {
     version: 'v41',
     changes: [

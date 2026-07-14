@@ -17,20 +17,21 @@ export class TransferRoom extends DurableObject<Env> {
     const peerId = crypto.randomUUID();
     const deviceName = url.searchParams.get("name") ?? "Device";
     const uaInfo = url.searchParams.get("ua") ?? "";
+    const deviceId = url.searchParams.get("did") ?? "";
 
     const { 0: client, 1: server } = new WebSocketPair();
-    this.ctx.acceptWebSocket(server, [peerId, deviceName, uaInfo]);
+    this.ctx.acceptWebSocket(server, [peerId, deviceName, uaInfo, deviceId]);
 
     const existingPeers = this.ctx
       .getWebSockets()
       .filter((ws) => ws !== server)
-      .map((ws) => { const [id, name, ua] = this.ctx.getTags(ws); return { id, name, ua }; });
+      .map((ws) => { const [id, name, ua, did] = this.ctx.getTags(ws); return { id, name, ua, did }; });
 
     server.send(JSON.stringify({ type: "welcome", peerId, peers: existingPeers }));
 
     for (const ws of this.ctx.getWebSockets()) {
       if (ws !== server) {
-        ws.send(JSON.stringify({ type: "peer-joined", peerId, name: deviceName, ua: uaInfo }));
+        ws.send(JSON.stringify({ type: "peer-joined", peerId, name: deviceName, ua: uaInfo, did: deviceId }));
       }
     }
 

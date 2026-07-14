@@ -1,6 +1,9 @@
 const noPeersEl = document.getElementById('no-peers');
 const noLobbyPeersEl = document.getElementById('no-lobby-peers');
 
+if (!localStorage.getItem('drop-did')) localStorage.setItem('drop-did', crypto.randomUUID());
+const myDeviceId = localStorage.getItem('drop-did');
+
 function waitConnected() {
   if (state.ws?.readyState === WebSocket.OPEN && !state.reconnecting) return Promise.resolve();
   if (!connectedPromise) connectedPromise = new Promise(r => { connectedResolve = r; });
@@ -15,7 +18,7 @@ function connect(code) {
   if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(); }
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const uaInfo = getUAInfo();
-  state.ws = new WebSocket(`${proto}//${location.host}/ws/${code}?name=${encodeURIComponent(state.myName)}&ua=${encodeURIComponent(uaInfo)}`);
+  state.ws = new WebSocket(`${proto}//${location.host}/ws/${code}?name=${encodeURIComponent(state.myName)}&ua=${encodeURIComponent(uaInfo)}&did=${encodeURIComponent(myDeviceId)}`);
   state.ws.binaryType = 'arraybuffer';
   state.ws.onmessage = async (e) => {
     if (e.data instanceof ArrayBuffer) handleBinaryMessage(e.data);
@@ -41,15 +44,26 @@ async function handleMessage(msg) {
       state.reconnecting = false;
       resolveConnected();
       Object.keys(state.peers).forEach(id => delete state.peers[id]);
-      msg.peers.forEach(p => addPeer(p.id, p.name, p.ua));
+      msg.peers.forEach(p => addPeer(p.id, p.name, p.ua, p.did));
       if (!state.isCreator && msg.peers.length === 0)
         showRoomError('Room is empty — make sure the other device created the room first.');
+      // Resume in-progress receives after MY reconnect (sender peer is already in room)
+      for (const [fileId, recv] of Object.entries(state.recvState)) {
+        if (recv.received > 0 && recv.received < recv.total) {
+          msg.peers.forEach(p => send({ type: 'resume-request', to: p.id, fileId, received: recv.received }));
+        }
+      }
       break;
-    case 'peer-joined': addPeer(msg.peerId, msg.name, msg.ua); break;
+    case 'peer-joined': addPeer(msg.peerId, msg.name, msg.ua, msg.did); break;
     case 'peer-left': removePeer(msg.peerId); break;
     case 'transfer-request': showIncomingRequest(msg); break;
     case 'batch-request': showIncomingRequest(msg); break;
-    case 'transfer-accept': startSendingFile(msg.from, msg.fileId); break;
+    case 'transfer-accept': startSendingFile(msg.from, msg.fileId, 0); break;
+    case 'resume-request': {
+      const resumeEntry = state.sendQueue.find(e => e.fileId === msg.fileId);
+      if (resumeEntry) startSendingFile(msg.from, msg.fileId, msg.received ?? 0);
+      break;
+    }
     case 'batch-accept': startSendingBatch(msg.from, msg.batchId); break;
     case 'transfer-decline': markTransferStatus(msg.fileId, 'Declined', 'transfer-error'); break;
     case 'batch-decline':
@@ -67,8 +81,28 @@ async function handleMessage(msg) {
   }
 }
 
-function addPeer(id, name, ua) {
-  state.peers[id] = { name, ua: ua || '' };
+function addPeer(id, name, ua, did) {
+  // Detect reconnect: same device, new peerId
+  const oldId = did ? state.peersByDid[did] : null;
+  if (oldId && oldId !== id && state.reconnectTimers[oldId]) {
+    clearTimeout(state.reconnectTimers[oldId]);
+    delete state.reconnectTimers[oldId];
+    // Update pending send targets from old to new peerId
+    state.sendQueue.forEach(entry => {
+      if (entry.pendingTargets.has(oldId)) {
+        entry.pendingTargets.delete(oldId);
+        entry.pendingTargets.add(id);
+      }
+    });
+    // Send resume-requests for any in-progress receives from this peer
+    for (const [fileId, recv] of Object.entries(state.recvState)) {
+      if (recv.received > 0 && recv.received < recv.total) {
+        send({ type: 'resume-request', to: id, fileId, received: recv.received });
+      }
+    }
+  }
+  state.peers[id] = { name, ua: ua || '', did: did || '' };
+  if (did) state.peersByDid[did] = id;
   renderPeers();
   if (state.pendingShareFiles?.length && Object.keys(state.peers).length === 1) {
     const files = state.pendingShareFiles;
@@ -79,12 +113,25 @@ function addPeer(id, name, ua) {
 }
 
 function removePeer(id) {
+  const peer = state.peers[id];
+  // Show "Reconnecting..." on transfers waiting for this peer
   state.sendQueue.forEach(entry => {
-    if (entry.pendingTargets.has(id)) {
-      markTransferStatus(entry.fileId, 'Connection lost', 'transfer-error');
-      entry.pendingTargets.delete(id);
-    }
+    if (entry.pendingTargets.has(id)) markTransferStatus(entry.fileId, 'Reconnecting...', '');
   });
+  // Grace period: if peer reconnects within 7s, resume; otherwise error
+  state.reconnectTimers[id] = setTimeout(() => {
+    delete state.reconnectTimers[id];
+    if (peer?.did) delete state.peersByDid[peer.did];
+    state.sendQueue.forEach(entry => {
+      if (entry.pendingTargets.has(id)) {
+        markTransferStatus(entry.fileId, 'Connection lost', 'transfer-error');
+        entry.pendingTargets.delete(id);
+      }
+    });
+    state.requestQueue = [];
+    state.activeRequest = null;
+    document.getElementById('overlay')?.classList.add('hidden');
+  }, 7000);
   delete state.peers[id];
   renderPeers();
 }
@@ -560,7 +607,7 @@ async function queueFiles(files) {
       const fileId = crypto.randomUUID();
       const key = await generateKey();
       const keyB64 = await exportKey(key);
-      state.sendQueue.push({ file, fileId, key, batchId, pendingTargets: new Set(peerIds) });
+      state.sendQueue.push({ file, fileId, key, batchId, pendingTargets: new Set(peerIds), prepared: false, srcBuf: null, compressed: false });
       batchEntries.push({ fileId, filename: file.name, size: file.size, mimeType: file.type || 'application/octet-stream', key: keyB64 });
     }
     const totalSize = files.reduce((s, f) => s + f.size, 0);
@@ -573,7 +620,7 @@ async function queueFiles(files) {
     const fileId = crypto.randomUUID();
     const key = await generateKey();
     const keyB64 = await exportKey(key);
-    state.sendQueue.push({ file, fileId, key, pendingTargets: new Set(peerIds) });
+    state.sendQueue.push({ file, fileId, key, pendingTargets: new Set(peerIds), prepared: false, srcBuf: null, compressed: false });
     peerIds.forEach(peerId => {
       send({ type: 'transfer-request', to: peerId, fileId, filename: file.name, size: file.size, mimeType: file.type || 'application/octet-stream', key: keyB64 });
       addTransferItem(fileId, file.name, file.size, 'send', state.peers[peerId]?.name ?? peerId);
@@ -581,28 +628,39 @@ async function queueFiles(files) {
   }
 }
 
-async function startSendingFile(fromPeerId, fileId) {
+async function startSendingFile(fromPeerId, fileId, fromChunk = 0) {
   const entry = state.sendQueue.find(e => e.fileId === fileId);
   if (!entry) return;
   entry.pendingTargets.delete(fromPeerId);
-  updateProgress(fileId, 0, 'Sending...');
+
+  // Generation counter: incrementing preempts any loop already running for this fileId
+  state.sendGeneration[fileId] = (state.sendGeneration[fileId] ?? 0) + 1;
+  const gen = state.sendGeneration[fileId];
 
   const { file, key } = entry;
   const mimeType = file.type || 'application/octet-stream';
 
-  let srcBuf = null;
-  let compressed = false;
-  if (isCompressible(mimeType, file.size)) {
-    try { srcBuf = await compressBuffer(await file.arrayBuffer()); compressed = true; } catch {}
+  // Compress once and cache in the entry so resumed sends use identical byte offsets
+  if (!entry.prepared) {
+    if (isCompressible(mimeType, file.size)) {
+      try { entry.srcBuf = await compressBuffer(await file.arrayBuffer()); entry.compressed = true; } catch {}
+    }
+    entry.prepared = true;
   }
+  const srcBuf = entry.srcBuf;
+  const compressed = entry.compressed;
 
   const totalBytes = srcBuf ? srcBuf.byteLength : file.size;
   const total = Math.ceil(totalBytes / CHUNK_SIZE);
-  let offset = 0, index = 0;
+  let offset = fromChunk * CHUNK_SIZE;
+  let index = fromChunk;
+  const approxPct = Math.min(99, (offset / totalBytes) * 100);
+  updateProgress(fileId, fromChunk > 0 ? approxPct : 0, fromChunk > 0 ? 'Resuming...' : 'Sending...');
   const startTime = Date.now();
 
   try {
     while (offset < totalBytes) {
+      if (state.sendGeneration[fileId] !== gen) return; // preempted by a newer resume
       if (state.cancelledTransfers.has(fileId)) {
         state.cancelledTransfers.delete(fileId);
         send({ type: 'transfer-cancel', to: fromPeerId, fileId });
@@ -617,7 +675,8 @@ async function startSendingFile(fromPeerId, fileId) {
       offset += buffer.byteLength;
       index++;
       const elapsed = (Date.now() - startTime) / 1000 || 0.001;
-      const speed = offset / elapsed;
+      const bytesSent = offset - fromChunk * CHUNK_SIZE;
+      const speed = bytesSent / elapsed;
       const eta = (totalBytes - offset) / speed;
       updateProgress(fileId, Math.min(99, (offset / totalBytes) * 100),
         fmtSpeed(speed) + (eta > 1 ? ` · ${fmtETA(eta)}` : ''));

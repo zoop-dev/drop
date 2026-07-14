@@ -25,6 +25,9 @@ const state = {
   pendingShareFiles: null,
   activeShareId: null,
   batchProgress: {},
+  peersByDid: {},
+  reconnectTimers: {},
+  sendGeneration: {},
 };
 
 let connectedResolve = null;
