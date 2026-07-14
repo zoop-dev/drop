@@ -1,6 +1,12 @@
-const APP_VERSION = 'v40';
+const APP_VERSION = 'v41';
 
 const CHANGELOG = [
+  {
+    version: 'v41',
+    changes: [
+      'receive-side transfer speed and ETA'
+    ]
+  },
   {
     version: 'v39',
     changes: [

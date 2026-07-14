@@ -718,7 +718,7 @@ async function handleBinaryMessage(buffer) {
   const ciphertext = buffer.slice(o);
   if (!state.decryptKeys[fileId]) return;
   if (isFirst && !state.recvState[fileId]) {
-    state.recvState[fileId] = { name: meta.filename, size: meta.size, mimeType: meta.mimeType, compressed, chunks: [], received: 0, total };
+    state.recvState[fileId] = { name: meta.filename, size: meta.size, mimeType: meta.mimeType, compressed, chunks: [], received: 0, total, startTime: Date.now() };
     if (!state.fileBatch[fileId] && !document.getElementById('transfer-' + fileId)) {
       addTransferItem(fileId, meta.filename, meta.size, 'recv', state.peers[from]?.name ?? from);
     }
@@ -729,7 +729,11 @@ async function handleBinaryMessage(buffer) {
     const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, state.decryptKeys[fileId], ciphertext);
     recv.chunks[index] = decrypted;
     recv.received++;
-    updateProgress(fileId, Math.min(99, (recv.received / total) * 100), 'Receiving...');
+    const recvPct = recv.received / total;
+    const recvElapsed = (Date.now() - recv.startTime) / 1000 || 0.001;
+    const recvSpeed = (recvPct * recv.size) / recvElapsed;
+    const recvEta = ((1 - recvPct) * recv.size) / recvSpeed;
+    updateProgress(fileId, Math.min(99, recvPct * 100), fmtSpeed(recvSpeed) + (recvEta > 1 ? ` · ${fmtETA(recvEta)}` : ''));
     if (recv.received >= total) {
       const ordered = Array.from({ length: total }, (_, i) => recv.chunks[i]);
       if (ordered.some(c => !c)) {
