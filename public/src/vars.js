@@ -1,6 +1,20 @@
-const APP_VERSION = 'v49';
+const APP_VERSION = 'v52';
 
 const CHANGELOG = [
+  {
+    version: 'v52',
+    changes: [
+      'sender progress bar pauses when the other device disconnects mid-transfer',
+      'transfer resumes from the correct position when they reconnect',
+      'periodic ACKs keep sender and receiver in sync'
+    ]
+  },
+  {
+    version: 'v51',
+    changes: [
+      'golden dot on peer card when connected via P2P'
+    ]
+  },
   {
     version: 'v50',
     changes: [
