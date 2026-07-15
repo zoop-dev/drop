@@ -377,7 +377,7 @@ async function receiveShareLink(id, keyB64) {
     }
     let decrypted;
     try {
-      decrypted = await decryptChunk(key, payload.iv, payload.data);
+      decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(fromB64(payload.iv)) }, key, fromB64(payload.data));
     } catch {
       btn.textContent = 'Decryption failed';
       btn.disabled = false;

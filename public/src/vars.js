@@ -2,8 +2,9 @@ const APP_VERSION = 'v55';
 
 const CHANGELOG = [
   {
-    version: 'v59',
+    version: 'v60',
     changes: [
+      'fix share link download always showing decryption failed',
       'update banner is now a full-screen modal that blocks transfers'
     ]
   },
