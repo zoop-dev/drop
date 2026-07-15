@@ -88,6 +88,11 @@ async function handleMessage(msg) {
       delete state.decryptKeys[msg.fileId];
       delete state.recvState[msg.fileId];
       delete state.fileBatch[msg.fileId];
+      state.requestQueue = state.requestQueue.filter(r => r.fileId !== msg.fileId);
+      if (state.activeRequest?.fileId === msg.fileId) {
+        state.activeRequest = null;
+        drainRequestQueue();
+      }
       markTransferStatus(msg.fileId, 'Cancelled', '');
       break;
     case 'text': await receiveText(msg); break;
@@ -273,9 +278,18 @@ function addTransferItem(fileId, filename, size, direction, peerName) {
     cancelBtn.title = 'Cancel';
     cancelBtn.textContent = '✕';
     cancelBtn.addEventListener('click', () => {
-      state.cancelledTransfers.add(fileId);
-      cancelBtn.remove();
-      markTransferStatus(fileId, 'Cancelling...', '');
+      const entry = state.sendQueue.find(e => e.fileId === fileId);
+      if (entry && entry.pendingTargets.size > 0 && !entry.done) {
+        entry.pendingTargets.forEach(peerId => send({ type: 'transfer-cancel', to: peerId, fileId }));
+        entry.pendingTargets.clear();
+        entry.done = true;
+        cancelBtn.remove();
+        markTransferStatus(fileId, 'Cancelled', '');
+      } else {
+        state.cancelledTransfers.add(fileId);
+        cancelBtn.remove();
+        markTransferStatus(fileId, 'Cancelling...', '');
+      }
     });
     headerRight.appendChild(cancelBtn);
   }
@@ -689,7 +703,8 @@ async function startSendingFile(fromPeerId, fileId, fromChunk = 0) {
       const bytesSent = offset - fromChunk * CHUNK_SIZE;
       const speed = bytesSent / elapsed;
       const eta = (totalBytes - offset) / speed;
-      updateProgress(fileId, Math.min(99, (offset / totalBytes) * 100),
+      const displayChunks = Math.min(index, (state.ackCount[fileId] || 0) + 50);
+      updateProgress(fileId, Math.min(99, displayChunks / total * 100),
         fmtSpeed(speed) + (eta > 1 ? ` · ${fmtETA(eta)}` : ''));
       await new Promise(r => setTimeout(r, 0));
     }
@@ -826,7 +841,7 @@ async function handleBinaryMessage(buffer) {
     const recvElapsed = (Date.now() - recv.startTime) / 1000 || 0.001;
     const recvSpeed = (recvPct * recv.size) / recvElapsed;
     const recvEta = ((1 - recvPct) * recv.size) / recvSpeed;
-    updateProgress(fileId, Math.min(99, recvPct * 100), fmtSpeed(recvSpeed) + (recvEta > 1 ? ` · ${fmtETA(recvEta)}` : ''));
+    updateProgress(fileId, recvPct * 100, fmtSpeed(recvSpeed) + (recvEta > 1 ? ` · ${fmtETA(recvEta)}` : ''));
     if (recv.received >= total) {
       const ordered = Array.from({ length: total }, (_, i) => recv.chunks[i]);
       if (ordered.some(c => !c)) {

@@ -1,6 +1,13 @@
-const APP_VERSION = 'v52';
+const APP_VERSION = 'v54';
 
 const CHANGELOG = [
+  {
+    version: 'v54',
+    changes: [
+      'fix receiver stuck at 99% after transfer completes',
+      'cancel button now works before the other device accepts the request'
+    ]
+  },
   {
     version: 'v52',
     changes: [
