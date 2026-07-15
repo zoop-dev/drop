@@ -339,6 +339,7 @@ header {
 .peer-status { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 .reconnecting-status { font-size: 12px; color: var(--muted); font-style: italic; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); display: inline-block; box-shadow: 0 0 6px var(--green); }
+.dot--p2p { background: #f5c542; box-shadow: 0 0 6px #f5c542; }
 
 .no-peers {
   color: var(--muted);

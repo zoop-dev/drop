@@ -195,9 +195,10 @@ function renderPeers() {
     } else {
       statusSpan.className = 'peer-status';
       const dot = document.createElement('span');
-      dot.className = 'dot';
+      const p2p = state.rtcPeers[id]?.ready;
+      dot.className = p2p ? 'dot dot--p2p' : 'dot';
       statusSpan.appendChild(dot);
-      statusSpan.append(state.rtcPeers[id]?.ready ? ' P2P' : ' Connected');
+      statusSpan.append(p2p ? ' P2P' : ' Connected');
     }
     el.appendChild(infoDiv);
     el.appendChild(statusSpan);
