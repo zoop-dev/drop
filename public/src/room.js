@@ -386,7 +386,8 @@ function setTransferStats(fileId, totalSecs, avgBps) {
   const stats = document.createElement('div');
   stats.className = 'transfer-stats';
   stats.textContent = fmtETA(totalSecs) + ' · ' + fmtSpeed(avgBps);
-  el.querySelector('.progress-bar').after(stats);
+  const pb = el.querySelector('.progress-bar');
+  if (pb) pb.after(stats);
 }
 
 function markTransferStatus(fileId, label, cls) {
@@ -418,9 +419,11 @@ function markTransferStatus(fileId, label, cls) {
   const el = document.getElementById('transfer-' + fileId);
   if (!el) return;
   const s = el.querySelector('.status-text');
+  if (!s) return;
   s.className = 'status-text ' + (cls || '');
   s.textContent = label;
-  el.querySelector('.pct-text').textContent = '';
+  const pctEl = el.querySelector('.pct-text');
+  if (pctEl) pctEl.textContent = '';
   
   if (cls === 'transfer-done' || cls === 'transfer-error' || label === 'Cancelled') {
     const cancelBtn = el.querySelector('.btn-cancel-xfer');
@@ -585,7 +588,12 @@ function markTransferReceived(fileId, filename, blobUrl, mimeType) {
     thumb.alt = filename;
     el.querySelector('.progress-bar').after(thumb);
   }
-  const footer = el.querySelector('.transfer-footer');
+  let footer = el.querySelector('.transfer-footer');
+  if (!footer) {
+    footer = document.createElement('div');
+    footer.className = 'transfer-footer';
+    el.appendChild(footer);
+  }
   footer.innerHTML = '';
   const readySpan = document.createElement('span');
   readySpan.className = 'status-text transfer-done';
@@ -857,11 +865,19 @@ async function handleBinaryMessage(buffer) {
         return;
       }
       let blob;
-      if (recv.compressed) {
-        const combined = await new Blob(ordered.map(c => new Uint8Array(c))).arrayBuffer();
-        blob = new Blob([await decompressBuffer(combined)], { type: recv.mimeType });
-      } else {
-        blob = new Blob(ordered.map(c => new Uint8Array(c)), { type: recv.mimeType });
+      try {
+        if (recv.compressed) {
+          const combined = await new Blob(ordered.map(c => new Uint8Array(c))).arrayBuffer();
+          blob = new Blob([await decompressBuffer(combined)], { type: recv.mimeType });
+        } else {
+          blob = new Blob(ordered.map(c => new Uint8Array(c)), { type: recv.mimeType });
+        }
+      } catch (e) {
+        console.error('File assembly failed:', e);
+        markTransferStatus(fileId, 'Failed to assemble file', 'transfer-error');
+        delete state.recvState[fileId];
+        delete state.decryptKeys[fileId];
+        return;
       }
       const recvElapsedTotal = (Date.now() - recv.startTime) / 1000 || 0.001;
       setTransferStats(fileId, recvElapsedTotal, recv.size / recvElapsedTotal);
@@ -869,7 +885,8 @@ async function handleBinaryMessage(buffer) {
       delete state.recvState[fileId];
       delete state.decryptKeys[fileId];
     }
-  } catch {
+  } catch (e) {
+    console.error('Decryption failed:', e);
     markTransferStatus(fileId, 'Decryption failed', 'transfer-error');
     delete state.recvState[fileId];
     delete state.decryptKeys[fileId];

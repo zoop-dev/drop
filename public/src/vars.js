@@ -2,11 +2,17 @@ const APP_VERSION = 'v55';
 
 const CHANGELOG = [
   {
+    version: 'v56',
+    changes: [
+      'fix save button not appearing for small/fast file transfers',
+      'separate error reporting for decrypt vs assembly failures'
+    ]
+  },
+  {
     version: 'v55',
     changes: [
       'uploading phase tracks chunks going out, transferring phase tracks delivery via acks',
-      'remove minification (better compatibility)',
-      'fix save button not appearing for small files'
+      'remove minification (better compatibility)'
     ]
   },
   {
