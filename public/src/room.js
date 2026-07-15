@@ -35,6 +35,10 @@ function connect(code) {
 }
 
 function send(obj) {
+  if (obj.to) {
+    const p = state.rtcPeers[obj.to];
+    if (p?.ready && p.dc?.readyState === 'open') { p.dc.send(JSON.stringify(obj)); return; }
+  }
   if (state.ws?.readyState === WebSocket.OPEN) state.ws.send(JSON.stringify(obj));
 }
 
@@ -45,7 +49,7 @@ async function handleMessage(msg) {
       state.reconnecting = false;
       resolveConnected();
       Object.keys(state.peers).forEach(id => delete state.peers[id]);
-      msg.peers.forEach(p => addPeer(p.id, p.name, p.ua, p.did));
+      msg.peers.forEach(p => { addPeer(p.id, p.name, p.ua, p.did); send({ type: 'version-sync', to: p.id, v: APP_VERSION }); });
       if (!state.isCreator && msg.peers.length === 0)
         showRoomError('Room is empty — make sure the other device created the room first.');
       // Resume in-progress receives after MY reconnect (sender peer is already in room)
@@ -55,7 +59,7 @@ async function handleMessage(msg) {
         }
       }
       break;
-    case 'peer-joined': addPeer(msg.peerId, msg.name, msg.ua, msg.did); if (rtcSupported()) initiateRtc(msg.peerId); break;
+    case 'peer-joined': addPeer(msg.peerId, msg.name, msg.ua, msg.did); if (rtcSupported()) initiateRtc(msg.peerId); send({ type: 'version-sync', to: msg.peerId, v: APP_VERSION }); break;
     case 'peer-left': removePeer(msg.peerId); break;
     case 'transfer-request': showIncomingRequest(msg); break;
     case 'batch-request': showIncomingRequest(msg); break;
@@ -66,6 +70,7 @@ async function handleMessage(msg) {
       break;
     }
     case 'batch-accept': startSendingBatch(msg.from, msg.batchId); break;
+    case 'version-sync': if (parseInt(APP_VERSION.slice(1)) < parseInt(msg.v.slice(1))) location.reload(); break;
     case 'rtc-offer': handleRtcOffer(msg); break;
     case 'rtc-answer': handleRtcAnswer(msg); break;
     case 'rtc-ice': handleRtcIce(msg); break;

@@ -1,6 +1,13 @@
-const APP_VERSION = 'v47';
+const APP_VERSION = 'v48';
 
 const CHANGELOG = [
+  {
+    version: 'v48',
+    changes: [
+      'all messages (file transfers and control) route through P2P DataChannel when available',
+      'version sync on connect — outdated client auto-reloads to match the room'
+    ]
+  },
   {
     version: 'v47',
     changes: [

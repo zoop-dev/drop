@@ -22,7 +22,13 @@ function setupDataChannel(peerId, dc) {
     renderPeers();
   };
   dc.onmessage = (e) => {
-    if (e.data instanceof ArrayBuffer) handleBinaryMessage(e.data);
+    if (e.data instanceof ArrayBuffer) {
+      handleBinaryMessage(e.data);
+    } else {
+      const msg = JSON.parse(e.data);
+      msg.from = peerId; // server normally injects this on WS relay; we do it here
+      handleMessage(msg);
+    }
   };
   dc.onerror = () => cleanupRtcPeer(peerId);
 }
