@@ -598,39 +598,16 @@ header {
 }
 .nickname-input::placeholder { color: var(--muted); font-weight: 400; }
 
-.room-password-row {
+.join-pw-row {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 16px;
 }
 
-.btn-lock-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+.create-pw-icon {
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 8px 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
   flex-shrink: 0;
-}
-
-.btn-lock-toggle:hover {
-  color: var(--blue);
-  border-color: var(--blue-glow);
-}
-
-.btn-lock-toggle.active {
-  color: var(--blue);
-  border-color: var(--blue);
-  background: var(--blue-dim);
 }
 
 .room-password-input {
@@ -645,6 +622,7 @@ header {
   outline: none;
   transition: border-color 0.2s;
   min-width: 0;
+  width: 100%;
 }
 
 .room-password-input:focus {
@@ -656,8 +634,19 @@ header {
   font-weight: 400;
 }
 
-.join-password {
-  width: 100%;
+.join-pw-error {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+  background: rgba(255, 68, 102, 0.06);
+  border: 1px solid rgba(255, 68, 102, 0.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+}
+
+.join-pw-row + .join-pw-error.hidden {
+  display: none;
 }
 
 .lobby-bar {

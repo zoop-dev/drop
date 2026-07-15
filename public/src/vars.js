@@ -2,6 +2,12 @@ const APP_VERSION = 'v55';
 
 const CHANGELOG = [
   {
+    version: 'v64',
+    changes: [
+      'password rooms: create-room modal, password persists through page reload, wrong password shows inline error on join screen'
+    ]
+  },
+  {
     version: 'v63',
     changes: [
       'password-protected rooms — lock a room when creating, password travels in the share link',

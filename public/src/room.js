@@ -96,13 +96,22 @@ async function handleMessage(msg) {
       markTransferStatus(msg.fileId, 'Cancelled', '');
       break;
     case 'text': await receiveText(msg); break;
-    case 'auth-error':
+    case 'auth-error': {
+      const failedCode = state.roomCode;
       state.ws.onclose = null;
       state.ws.close();
       state.roomCode = null;
-      showView('home');
-      showRoomError('Incorrect room password');
+      state.roomPasswordHash = null;
+      state.roomPassword = null;
+      document.getElementById('code-input').value = failedCode ?? '';
+      const pwErr = document.getElementById('join-pw-error');
+      const pwInput = document.getElementById('join-password-input');
+      pwErr.classList.remove('hidden');
+      pwInput.value = '';
+      showView('join');
+      setTimeout(() => pwInput.focus(), 50);
       break;
+    }
   }
 }
 

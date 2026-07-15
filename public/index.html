@@ -64,13 +64,6 @@
       <button class="btn btn-secondary" id="btn-join-show" title="Join an existing room using a 6-character code or QR scan">Join room</button>
     </div>
 
-    <div class="room-password-row" id="room-password-row">
-      <button class="btn-lock-toggle" id="btn-lock-toggle" title="Add a password to protect this room" aria-pressed="false">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-        Lock room
-      </button>
-      <input class="room-password-input hidden" id="room-password-input" type="text" placeholder="room password" maxlength="50" autocomplete="off" spellcheck="false">
-    </div>
 
     <div class="lobby-bar">
       <button class="btn-public" id="btn-go-public" title="Make yourself visible to nearby devices on the same network">Go public</button>
@@ -88,7 +81,11 @@
   <div class="view" id="view-join">
     <div class="join-wrapper">
       <input class="code-input" id="code-input" maxlength="6" placeholder="XXXXXX" autocomplete="off" spellcheck="false">
-      <input class="room-password-input join-password" id="join-password-input" type="text" placeholder="room password (if protected)" maxlength="50" autocomplete="off" spellcheck="false">
+      <div class="join-pw-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" class="create-pw-icon"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        <input class="room-password-input" id="join-password-input" type="text" placeholder="room password (if protected)" maxlength="50" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="join-pw-error hidden" id="join-pw-error">Incorrect password — try again</div>
       <div class="btn-row">
         <button class="btn btn-primary" id="btn-join">Join</button>
         <button class="btn btn-secondary" id="btn-scan-qr" title="Scan a QR code to join a room instantly">Scan QR</button>
@@ -237,6 +234,21 @@
 
     <div class="request-actions share-upload-actions">
       <button class="btn-decline" id="btn-share-close">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="create-room-overlay">
+  <div class="request-card create-room-card">
+    <div class="modal-title">Create a room</div>
+    <div class="modal-subtitle">Optionally lock it with a password</div>
+    <div class="join-pw-row" style="margin-top: 20px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" class="create-pw-icon"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+      <input class="room-password-input" id="room-password-input" type="text" placeholder="room password (optional)" maxlength="50" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="request-actions" style="margin-top: 20px;">
+      <button class="btn btn-primary" id="btn-create-confirm">Create</button>
+      <button class="btn-decline" id="btn-create-cancel">Cancel</button>
     </div>
   </div>
 </div>

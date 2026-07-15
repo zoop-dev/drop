@@ -95,16 +95,6 @@ function requireNick() {
   return true;
 }
 
-const lockToggle = document.getElementById('btn-lock-toggle');
-const roomPasswordInput = document.getElementById('room-password-input');
-lockToggle.addEventListener('click', () => {
-  const active = lockToggle.classList.toggle('active');
-  lockToggle.setAttribute('aria-pressed', String(active));
-  roomPasswordInput.classList.toggle('hidden', !active);
-  if (active) roomPasswordInput.focus();
-  else roomPasswordInput.value = '';
-});
-
 async function setRoomPassword(pw) {
   if (pw) {
     state.roomPassword = pw;
@@ -115,12 +105,30 @@ async function setRoomPassword(pw) {
   }
 }
 
-document.getElementById('btn-create').addEventListener('click', async () => {
+document.getElementById('btn-create').addEventListener('click', () => {
   if (!requireNick()) return;
-  const pw = lockToggle.classList.contains('active') ? roomPasswordInput.value.trim() : '';
+  document.getElementById('room-password-input').value = '';
+  document.getElementById('create-room-overlay').classList.remove('hidden');
+  setTimeout(() => document.getElementById('room-password-input').focus(), 50);
+});
+
+document.getElementById('btn-create-cancel').addEventListener('click', () => {
+  document.getElementById('create-room-overlay').classList.add('hidden');
+});
+
+async function doCreateRoom() {
+  const pw = document.getElementById('room-password-input').value.trim();
   await setRoomPassword(pw);
+  if (pw) sessionStorage.setItem('drop-room-pw', pw);
+  else sessionStorage.removeItem('drop-room-pw');
+  document.getElementById('create-room-overlay').classList.add('hidden');
   const { code } = await fetch('/api/room', { method: 'POST' }).then(r => r.json());
   await enterRoom(code, true);
+}
+
+document.getElementById('btn-create-confirm').addEventListener('click', doCreateRoom);
+document.getElementById('room-password-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doCreateRoom();
 });
 document.getElementById('btn-join-show').addEventListener('click', () => {
   if (!requireNick()) return;
@@ -139,6 +147,9 @@ document.getElementById('code-input').addEventListener('keydown', e => {
 document.getElementById('join-password-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('btn-join').click();
 });
+document.getElementById('join-password-input').addEventListener('input', () => {
+  document.getElementById('join-pw-error').classList.add('hidden');
+});
 
 document.getElementById('back-btn').addEventListener('click', () => {
   if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(1000); }
@@ -146,10 +157,7 @@ document.getElementById('back-btn').addEventListener('click', () => {
   Object.values(state.rtcPeers).forEach(p => { try { p.dc?.close(); } catch {} try { p.pc.close(); } catch {} });
   Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, fileBatch: {}, batchRecvState: {}, batchProgress: {}, sendQueue: [], cancelledTransfers: new Set(), mySubnet: null, myV6: null, myAddressFamily: null, myPubHash: null, lobby: null, lobbyId: null, lobbyPeers: {}, peersByDid: {}, reconnectTimers: {}, sendGeneration: {}, rtcPeers: {}, ackCount: {}, pendingFiles: null, roomPassword: null, roomPasswordHash: null });
   document.getElementById('send-target-overlay').classList.add('hidden');
-  lockToggle.classList.remove('active');
-  lockToggle.setAttribute('aria-pressed', 'false');
-  roomPasswordInput.classList.add('hidden');
-  roomPasswordInput.value = '';
+  document.getElementById('create-room-overlay').classList.add('hidden');
   connectedResolve = null; connectedPromise = null;
   const list = document.getElementById('peers-list');
   list.innerHTML = '';
@@ -162,6 +170,7 @@ document.getElementById('back-btn').addEventListener('click', () => {
   setDropEnabled(false);
   sessionStorage.removeItem('drop-room');
   sessionStorage.removeItem('drop-creator');
+  sessionStorage.removeItem('drop-room-pw');
   history.pushState({}, '', '/');
   showView('home');
 });
@@ -276,7 +285,8 @@ if (joinCode) {
   const savedCode = sessionStorage.getItem('drop-room');
   const wasCreator = sessionStorage.getItem('drop-creator') === '1';
   const code = roomPathMatch[1].toUpperCase();
-  setRoomPassword(pwFromHash()).then(() => enterRoom(code, savedCode === code && wasCreator));
+  const savedPw = pwFromHash() || (savedCode === code ? (sessionStorage.getItem('drop-room-pw') || '') : '');
+  setRoomPassword(savedPw).then(() => enterRoom(code, savedCode === code && wasCreator));
 } else if (sharePathMatch) {
   const keyB64 = decodeURIComponent(location.hash.replace('#key=', ''));
   if (keyB64) receiveShareLink(sharePathMatch[1], keyB64);
