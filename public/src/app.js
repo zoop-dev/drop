@@ -226,9 +226,6 @@ document.getElementById('update-banner-reload')?.addEventListener('click', async
   await Promise.all(keys.map(k => caches.delete(k)));
   location.reload();
 });
-document.getElementById('update-banner-close')?.addEventListener('click', () => {
-  document.getElementById('update-banner')?.classList.remove('is-on');
-});
 
 const joinCode = new URLSearchParams(location.search).get('join');
 const roomPathMatch = location.pathname.match(/^\/room\/([A-Z0-9]{6})$/i);

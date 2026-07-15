@@ -2,6 +2,12 @@ const APP_VERSION = 'v55';
 
 const CHANGELOG = [
   {
+    version: 'v59',
+    changes: [
+      'update banner is now a full-screen modal that blocks transfers'
+    ]
+  },
+  {
     version: 'v57',
     changes: [
       'fix save button not appearing for HTML, CSS, JSON and other compressed file types'
