@@ -217,6 +217,11 @@ document.getElementById('btn-changelog-close').addEventListener('click', () => {
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
 
+document.getElementById('update-banner-reload')?.addEventListener('click', () => location.reload());
+document.getElementById('update-banner-close')?.addEventListener('click', () => {
+  document.getElementById('update-banner')?.classList.remove('is-on');
+});
+
 const joinCode = new URLSearchParams(location.search).get('join');
 const roomPathMatch = location.pathname.match(/^\/room\/([A-Z0-9]{6})$/i);
 const sharePathMatch = location.pathname.match(/^\/share\/([A-Za-z0-9_-]{10,16})$/);

@@ -1,10 +1,21 @@
-const APP_VERSION = 'v48';
+const APP_VERSION = 'v49';
 
 const CHANGELOG = [
   {
+    version: 'v50',
+    changes: [
+      'show update banner with reload button when a newer version is detected in the room'
+    ]
+  },
+  {
+    version: 'v49',
+    changes: [
+      'P2P DataChannel carries binary file chunks only; control messages stay on WebSocket'
+    ]
+  },
+  {
     version: 'v48',
     changes: [
-      'all messages (file transfers and control) route through P2P DataChannel when available',
       'version sync on connect — outdated client auto-reloads to match the room'
     ]
   },

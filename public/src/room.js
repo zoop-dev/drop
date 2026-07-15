@@ -35,10 +35,6 @@ function connect(code) {
 }
 
 function send(obj) {
-  if (obj.to) {
-    const p = state.rtcPeers[obj.to];
-    if (p?.ready && p.dc?.readyState === 'open') { p.dc.send(JSON.stringify(obj)); return; }
-  }
   if (state.ws?.readyState === WebSocket.OPEN) state.ws.send(JSON.stringify(obj));
 }
 
@@ -70,7 +66,7 @@ async function handleMessage(msg) {
       break;
     }
     case 'batch-accept': startSendingBatch(msg.from, msg.batchId); break;
-    case 'version-sync': if (parseInt(APP_VERSION.slice(1)) < parseInt(msg.v.slice(1))) location.reload(); break;
+    case 'version-sync': if (parseInt(APP_VERSION.slice(1)) < parseInt(msg.v.slice(1))) { const b = document.getElementById('update-banner'); if (b) b.classList.add('is-on'); } break;
     case 'rtc-offer': handleRtcOffer(msg); break;
     case 'rtc-answer': handleRtcAnswer(msg); break;
     case 'rtc-ice': handleRtcIce(msg); break;
