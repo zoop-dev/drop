@@ -26,7 +26,8 @@ function connect(code) {
   if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(); }
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const uaInfo = getUAInfo();
-  state.ws = new WebSocket(`${proto}//${location.host}/ws/${code}?name=${encodeURIComponent(state.myName)}&ua=${encodeURIComponent(uaInfo)}&did=${encodeURIComponent(myDeviceId)}`);
+  const pwh = state.roomPasswordHash ? `&pwh=${encodeURIComponent(state.roomPasswordHash)}` : '';
+  state.ws = new WebSocket(`${proto}//${location.host}/ws/${code}?name=${encodeURIComponent(state.myName)}&ua=${encodeURIComponent(uaInfo)}&did=${encodeURIComponent(myDeviceId)}${pwh}`);
   state.ws.binaryType = 'arraybuffer';
   state.ws.onmessage = async (e) => {
     if (e.data instanceof ArrayBuffer) handleBinaryMessage(e.data);
@@ -34,7 +35,7 @@ function connect(code) {
   };
   state.ws.onerror = () => {};
   state.ws.onclose = (e) => {
-    if (e.code === 1000) return;
+    if (e.code === 1000 || e.code === 4001) return;
     state.reconnecting = true;
     renderPeers();
     if (state.roomCode && document.visibilityState === 'visible')
@@ -95,6 +96,13 @@ async function handleMessage(msg) {
       markTransferStatus(msg.fileId, 'Cancelled', '');
       break;
     case 'text': await receiveText(msg); break;
+    case 'auth-error':
+      state.ws.onclose = null;
+      state.ws.close();
+      state.roomCode = null;
+      showView('home');
+      showRoomError('Incorrect room password');
+      break;
   }
 }
 
@@ -736,8 +744,13 @@ async function startSendingFile(fromPeerId, fileId, fromChunk = 0) {
 
   if (!entry.prepared) {
     if (isCompressible(mimeType, file.size)) {
-      updateProgress(fileId, 0, 'Compressing...');
-      try { entry.srcBuf = await compressBuffer(await file.arrayBuffer()); entry.compressed = true; } catch {}
+      updateProgress(fileId, 0, 'Compressing 0%');
+      try {
+        entry.srcBuf = await compressBuffer(await file.arrayBuffer(), (pct) => {
+          updateProgress(fileId, Math.round(pct * 100), `Compressing ${Math.round(pct * 100)}%`);
+        });
+        entry.compressed = true;
+      } catch {}
     }
     entry.prepared = true;
   }
@@ -838,7 +851,8 @@ async function enterRoom(code, isCreator, showCode = true) {
     const section = document.getElementById('room-code-section');
     section.style.display = '';
     document.getElementById('room-code-text').textContent = state.roomCode;
-    const joinUrl = `${location.origin}?join=${state.roomCode}`;
+    const pwSuffix = state.roomPassword ? `#pw=${encodeURIComponent(state.roomPassword)}` : '';
+    const joinUrl = `${location.origin}?join=${state.roomCode}${pwSuffix}`;
     const qr = DROP_QR.encode(joinUrl);
     if (qr) {
       const dpr = window.devicePixelRatio || 1;

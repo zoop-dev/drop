@@ -33,11 +33,20 @@ function isCompressible(mimeType, size) {
   if (t === 'application/pdf') return false;
   return true;
 }
-async function compressBuffer(buffer) {
+async function compressBuffer(buffer, onProgress) {
   const cs = new CompressionStream('gzip');
   const w = cs.writable.getWriter();
   const result = new Response(cs.readable).arrayBuffer();
-  await w.write(new Uint8Array(buffer));
+  const CHUNK = 256 * 1024;
+  const total = buffer.byteLength;
+  let offset = 0;
+  while (offset < total) {
+    const end = Math.min(offset + CHUNK, total);
+    await w.write(new Uint8Array(buffer, offset, end - offset));
+    offset = end;
+    if (onProgress) onProgress(offset / total);
+    await new Promise(r => setTimeout(r, 0));
+  }
   await w.close();
   return result;
 }
@@ -60,6 +69,11 @@ function bytesToUuid(b) {
   const h = Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
   return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
 }
+async function hashPassword(pw) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 async function encryptChunkRaw(key, buffer) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, buffer);

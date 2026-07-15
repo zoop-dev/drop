@@ -24,6 +24,8 @@ const state = {
   pendingLobbyConnect: null,
   pendingShareFiles: null,
   pendingFiles: null,
+  roomPasswordHash: null,
+  roomPassword: null,
   activeShareId: null,
   batchProgress: {},
   peersByDid: {},

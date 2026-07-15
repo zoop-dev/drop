@@ -598,6 +598,68 @@ header {
 }
 .nickname-input::placeholder { color: var(--muted); font-weight: 400; }
 
+.room-password-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.btn-lock-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-lock-toggle:hover {
+  color: var(--blue);
+  border-color: var(--blue-glow);
+}
+
+.btn-lock-toggle.active {
+  color: var(--blue);
+  border-color: var(--blue);
+  background: var(--blue-dim);
+}
+
+.room-password-input {
+  flex: 1;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 9px 12px;
+  outline: none;
+  transition: border-color 0.2s;
+  min-width: 0;
+}
+
+.room-password-input:focus {
+  border-color: var(--blue);
+}
+
+.room-password-input::placeholder {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.join-password {
+  width: 100%;
+}
+
 .lobby-bar {
   margin-bottom: 16px;
   display: flex;

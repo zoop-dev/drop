@@ -95,8 +95,30 @@ function requireNick() {
   return true;
 }
 
+const lockToggle = document.getElementById('btn-lock-toggle');
+const roomPasswordInput = document.getElementById('room-password-input');
+lockToggle.addEventListener('click', () => {
+  const active = lockToggle.classList.toggle('active');
+  lockToggle.setAttribute('aria-pressed', String(active));
+  roomPasswordInput.classList.toggle('hidden', !active);
+  if (active) roomPasswordInput.focus();
+  else roomPasswordInput.value = '';
+});
+
+async function setRoomPassword(pw) {
+  if (pw) {
+    state.roomPassword = pw;
+    state.roomPasswordHash = await hashPassword(pw);
+  } else {
+    state.roomPassword = null;
+    state.roomPasswordHash = null;
+  }
+}
+
 document.getElementById('btn-create').addEventListener('click', async () => {
   if (!requireNick()) return;
+  const pw = lockToggle.classList.contains('active') ? roomPasswordInput.value.trim() : '';
+  await setRoomPassword(pw);
   const { code } = await fetch('/api/room', { method: 'POST' }).then(r => r.json());
   await enterRoom(code, true);
 });
@@ -104,11 +126,17 @@ document.getElementById('btn-join-show').addEventListener('click', () => {
   if (!requireNick()) return;
   showView('join');
 });
-document.getElementById('btn-join').addEventListener('click', () => {
+document.getElementById('btn-join').addEventListener('click', async () => {
   const code = document.getElementById('code-input').value.trim().toUpperCase();
-  if (code.length === 6) enterRoom(code, false);
+  if (code.length !== 6) return;
+  const pw = document.getElementById('join-password-input').value.trim();
+  await setRoomPassword(pw);
+  enterRoom(code, false);
 });
 document.getElementById('code-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btn-join').click();
+});
+document.getElementById('join-password-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('btn-join').click();
 });
 
@@ -116,8 +144,12 @@ document.getElementById('back-btn').addEventListener('click', () => {
   if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(1000); }
   Object.values(state.reconnectTimers).forEach(clearTimeout);
   Object.values(state.rtcPeers).forEach(p => { try { p.dc?.close(); } catch {} try { p.pc.close(); } catch {} });
-  Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, fileBatch: {}, batchRecvState: {}, batchProgress: {}, sendQueue: [], cancelledTransfers: new Set(), mySubnet: null, myV6: null, myAddressFamily: null, myPubHash: null, lobby: null, lobbyId: null, lobbyPeers: {}, peersByDid: {}, reconnectTimers: {}, sendGeneration: {}, rtcPeers: {}, ackCount: {}, pendingFiles: null });
+  Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, fileBatch: {}, batchRecvState: {}, batchProgress: {}, sendQueue: [], cancelledTransfers: new Set(), mySubnet: null, myV6: null, myAddressFamily: null, myPubHash: null, lobby: null, lobbyId: null, lobbyPeers: {}, peersByDid: {}, reconnectTimers: {}, sendGeneration: {}, rtcPeers: {}, ackCount: {}, pendingFiles: null, roomPassword: null, roomPasswordHash: null });
   document.getElementById('send-target-overlay').classList.add('hidden');
+  lockToggle.classList.remove('active');
+  lockToggle.setAttribute('aria-pressed', 'false');
+  roomPasswordInput.classList.add('hidden');
+  roomPasswordInput.value = '';
   connectedResolve = null; connectedPromise = null;
   const list = document.getElementById('peers-list');
   list.innerHTML = '';
@@ -231,14 +263,20 @@ document.getElementById('update-banner-reload')?.addEventListener('click', async
 const joinCode = new URLSearchParams(location.search).get('join');
 const roomPathMatch = location.pathname.match(/^\/room\/([A-Z0-9]{6})$/i);
 const sharePathMatch = location.pathname.match(/^\/share\/([A-Za-z0-9_-]{10,16})$/);
+
+function pwFromHash() {
+  const m = location.hash.match(/[#&]pw=([^&]*)/);
+  return m ? decodeURIComponent(m[1]) : '';
+}
+
 if (joinCode) {
   history.replaceState({}, '', '/');
-  enterRoom(joinCode, false);
+  setRoomPassword(pwFromHash()).then(() => enterRoom(joinCode, false));
 } else if (roomPathMatch) {
   const savedCode = sessionStorage.getItem('drop-room');
   const wasCreator = sessionStorage.getItem('drop-creator') === '1';
   const code = roomPathMatch[1].toUpperCase();
-  enterRoom(code, savedCode === code && wasCreator);
+  setRoomPassword(pwFromHash()).then(() => enterRoom(code, savedCode === code && wasCreator));
 } else if (sharePathMatch) {
   const keyB64 = decodeURIComponent(location.hash.replace('#key=', ''));
   if (keyB64) receiveShareLink(sharePathMatch[1], keyB64);

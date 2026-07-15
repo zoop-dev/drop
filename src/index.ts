@@ -19,6 +19,19 @@ export class TransferRoom extends DurableObject<Env> {
     const uaInfo = url.searchParams.get("ua") ?? "";
     const deviceId = url.searchParams.get("did") ?? "";
 
+    const providedHash = url.searchParams.get("pwh") ?? "";
+    const storedHash = await this.ctx.storage.get<string>("pwh") ?? null;
+    if (storedHash !== null && storedHash !== providedHash) {
+      const { 0: client, 1: server } = new WebSocketPair();
+      server.accept();
+      server.send(JSON.stringify({ type: "auth-error", reason: "wrong-password" }));
+      server.close(4001, "Wrong password");
+      return new Response(null, { status: 101, webSocket: client });
+    }
+    if (storedHash === null && providedHash) {
+      await this.ctx.storage.put("pwh", providedHash);
+    }
+
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server, [peerId, deviceName, uaInfo, deviceId]);
 

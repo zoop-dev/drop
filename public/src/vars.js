@@ -2,6 +2,13 @@ const APP_VERSION = 'v55';
 
 const CHANGELOG = [
   {
+    version: 'v63',
+    changes: [
+      'password-protected rooms — lock a room when creating, password travels in the share link',
+      'compression percentage — shows live % progress instead of just "Compressing..."'
+    ]
+  },
+  {
     version: 'v62',
     changes: [
       'targeted sends: drag a file onto a specific peer card to send only to them, or choose recipients from a popup when using click-to-browse'
