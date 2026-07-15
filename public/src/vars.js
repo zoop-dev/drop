@@ -1,6 +1,14 @@
-const APP_VERSION = 'v54';
+const APP_VERSION = 'v55';
 
 const CHANGELOG = [
+  {
+    version: 'v55',
+    changes: [
+      'uploading phase tracks chunks going out, transferring phase tracks delivery via acks',
+      'remove minification (better compatibility)',
+      'fix save button not appearing for small files'
+    ]
+  },
   {
     version: 'v54',
     changes: [

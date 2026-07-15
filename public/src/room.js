@@ -672,7 +672,7 @@ async function startSendingFile(fromPeerId, fileId, fromChunk = 0) {
   entry.activeSendTarget = fromPeerId;
   if (fromChunk === 0) state.ackCount[fileId] = 0;
   const approxPct = Math.min(99, (offset / totalBytes) * 100);
-  updateProgress(fileId, fromChunk > 0 ? approxPct : 0, fromChunk > 0 ? 'Resuming...' : 'Sending...');
+  updateProgress(fileId, fromChunk > 0 ? approxPct : 0, fromChunk > 0 ? 'Resuming...' : 'Uploading...');
   const startTime = Date.now();
 
   try {
@@ -689,7 +689,7 @@ async function startSendingFile(fromPeerId, fileId, fromChunk = 0) {
       if (!state.peers[fromPeerId]) {
         updateProgress(fileId, Math.min(99, (state.ackCount[fileId] || 0) / total * 100), 'Waiting...');
         const ok = await waitForPeer(fromPeerId, fileId, gen);
-        if (!ok) return; // preempted by resume-request or give-up timer
+        if (!ok) return;
       }
       if (state.sendGeneration[fileId] !== gen) return;
       const buffer = srcBuf ? srcBuf.slice(offset, offset + CHUNK_SIZE)
@@ -703,17 +703,23 @@ async function startSendingFile(fromPeerId, fileId, fromChunk = 0) {
       const bytesSent = offset - fromChunk * CHUNK_SIZE;
       const speed = bytesSent / elapsed;
       const eta = (totalBytes - offset) / speed;
-      const displayChunks = Math.min(index, (state.ackCount[fileId] || 0) + 50);
-      updateProgress(fileId, Math.min(99, displayChunks / total * 100),
+      updateProgress(fileId, Math.min(99, index / total * 100),
         fmtSpeed(speed) + (eta > 1 ? ` · ${fmtETA(eta)}` : ''));
       await new Promise(r => setTimeout(r, 0));
     }
-    const totalElapsed = (Date.now() - startTime) / 1000 || 0.001;
+    // All chunks sent — switch to Transferring phase (track receiver via acks)
+    const uploadElapsed = (Date.now() - startTime) / 1000 || 0.001;
     const bytesSent = totalBytes - fromChunk * CHUNK_SIZE;
-    setTransferStats(fileId, totalElapsed, bytesSent / totalElapsed);
-    send({ type: 'transfer-complete', to: fromPeerId, fileId });
-    markTransferStatus(fileId, 'Sent', 'transfer-done');
     entry.srcBuf = null;
+    send({ type: 'transfer-complete', to: fromPeerId, fileId });
+    updateProgress(fileId, Math.min(99, (state.ackCount[fileId] || 0) / total * 100), 'Transferring...');
+    while ((state.ackCount[fileId] || 0) < total) {
+      await new Promise(r => setTimeout(r, 50));
+      if (state.sendGeneration[fileId] !== gen) return;
+      updateProgress(fileId, Math.min(99, (state.ackCount[fileId] || 0) / total * 100), 'Transferring...');
+    }
+    setTransferStats(fileId, uploadElapsed, bytesSent / uploadElapsed);
+    markTransferStatus(fileId, 'Sent', 'transfer-done');
     entry.activeSendTarget = null;
     entry.done = true;
     delete state.ackCount[fileId];
