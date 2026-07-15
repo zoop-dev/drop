@@ -56,7 +56,6 @@ async function handleMessage(msg) {
       msg.peers.forEach(p => { addPeer(p.id, p.name, p.ua, p.did); send({ type: 'version-sync', to: p.id, v: APP_VERSION }); });
       if (!state.isCreator && msg.peers.length === 0)
         showRoomError('Room is empty — make sure the other device created the room first.');
-      // Resume in-progress receives after MY reconnect (sender peer is already in room)
       for (const [fileId, recv] of Object.entries(state.recvState)) {
         if (recv.received > 0 && recv.received < recv.total) {
           msg.peers.forEach(p => send({ type: 'resume-request', to: p.id, fileId, received: recv.received }));
@@ -100,19 +99,16 @@ async function handleMessage(msg) {
 }
 
 function addPeer(id, name, ua, did) {
-  // Detect reconnect: same device, new peerId
   const oldId = did ? state.peersByDid[did] : null;
   if (oldId && oldId !== id && state.reconnectTimers[oldId]) {
     clearTimeout(state.reconnectTimers[oldId]);
     delete state.reconnectTimers[oldId];
-    // Update pending send targets from old to new peerId
     state.sendQueue.forEach(entry => {
       if (entry.pendingTargets.has(oldId)) {
         entry.pendingTargets.delete(oldId);
         entry.pendingTargets.add(id);
       }
     });
-    // Send resume-requests for any in-progress receives from this peer
     for (const [fileId, recv] of Object.entries(state.recvState)) {
       if (recv.received > 0 && recv.received < recv.total) {
         send({ type: 'resume-request', to: id, fileId, received: recv.received });
@@ -133,11 +129,9 @@ function addPeer(id, name, ua, did) {
 function removePeer(id) {
   cleanupRtcPeer(id);
   const peer = state.peers[id];
-  // Show "Reconnecting..." on transfers waiting for this peer
   state.sendQueue.forEach(entry => {
     if (entry.pendingTargets.has(id)) markTransferStatus(entry.fileId, 'Reconnecting...', '');
   });
-  // Grace period: if peer reconnects within 7s, resume; otherwise error
   state.reconnectTimers[id] = setTimeout(() => {
     delete state.reconnectTimers[id];
     if (peer?.did) delete state.peersByDid[peer.did];
@@ -654,14 +648,12 @@ async function startSendingFile(fromPeerId, fileId, fromChunk = 0) {
   if (!entry) return;
   entry.pendingTargets.delete(fromPeerId);
 
-  // Generation counter: incrementing preempts any loop already running for this fileId
   state.sendGeneration[fileId] = (state.sendGeneration[fileId] ?? 0) + 1;
   const gen = state.sendGeneration[fileId];
 
   const { file, key } = entry;
   const mimeType = file.type || 'application/octet-stream';
 
-  // Compress once and cache in the entry so resumed sends use identical byte offsets
   if (!entry.prepared) {
     if (isCompressible(mimeType, file.size)) {
       updateProgress(fileId, 0, 'Compressing...');
@@ -715,7 +707,6 @@ async function startSendingFile(fromPeerId, fileId, fromChunk = 0) {
         fmtSpeed(speed) + (eta > 1 ? ` · ${fmtETA(eta)}` : ''));
       await new Promise(r => setTimeout(r, 0));
     }
-    // All chunks sent — switch to Transferring phase (track receiver via acks)
     const uploadElapsed = (Date.now() - startTime) / 1000 || 0.001;
     const bytesSent = totalBytes - fromChunk * CHUNK_SIZE;
     entry.srcBuf = null;
@@ -799,8 +790,6 @@ async function sendBinaryChunk(toPeerId, fileId, index, total, iv, ciphertext, c
   let o = 0;
   const rtcPeer = state.rtcPeers[toPeerId];
   const useDC = rtcPeer?.ready && rtcPeer.dc?.readyState === 'open' && state.myId;
-  // For WS: first 16B = toPeerId (server replaces with fromPeerId before delivery).
-  // For DC: first 16B = myId (receiver reads this field directly as the sender).
   frame.set(uuidToBytes(useDC ? state.myId : toPeerId), o); o += 16;
   frame.set(uuidToBytes(fileId), o); o += 16;
   dv.setUint32(o, index, false); o += 4;

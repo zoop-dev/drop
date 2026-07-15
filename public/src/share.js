@@ -3,11 +3,13 @@ async function createShareLink(file) {
   const filenameEl = document.getElementById('share-upload-filename');
   const linkBox = document.getElementById('share-link-box');
   const linkInput = document.getElementById('share-link-input');
-  
+  const progressFill = document.getElementById('share-progress-fill');
+
   linkBox.classList.add('hidden');
   filenameEl.textContent = file.name;
-  filenameEl.style.display = 'block';
+  filenameEl.classList.remove('hidden');
   statusEl.textContent = 'Encrypting...';
+  progressFill.className = 'share-progress-fill indeterminate';
   state.activeShareId = null;
 
   try {
@@ -16,6 +18,8 @@ async function createShareLink(file) {
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, await file.arrayBuffer());
     statusEl.textContent = 'Uploading...';
+    progressFill.className = 'share-progress-fill';
+    progressFill.style.width = '50%';
     const res = await fetch('/api/share', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -39,14 +43,15 @@ async function createShareLink(file) {
     }
     const { id } = await res.json();
     state.activeShareId = id;
+    progressFill.style.width = '100%';
 
     const url = `${location.origin}/share/${id}#key=${encodeURIComponent(keyB64)}`;
     linkInput.value = url;
-    statusEl.textContent = 'Link ready — one-time use, expires in 24h';
+    statusEl.textContent = 'Link ready';
     linkBox.classList.remove('hidden');
     document.getElementById('btn-share-close').textContent = 'Done';
 
-    filenameEl.style.display = 'none';
+    filenameEl.classList.add('hidden');
     const renameSection = document.getElementById('share-rename-section');
     const renameInput = document.getElementById('share-rename-input');
     const renameStatus = document.getElementById('share-rename-status');
@@ -54,6 +59,8 @@ async function createShareLink(file) {
     renameSection.classList.remove('hidden');
     renameInput.value = file.name;
   } catch (err) {
+    progressFill.className = 'share-progress-fill';
+    progressFill.style.width = '0%';
     statusEl.textContent = 'Failed: ' + err.message;
     document.getElementById('btn-share-close').textContent = 'Close';
   }
@@ -63,15 +70,16 @@ document.getElementById('btn-create-share').addEventListener('click', () => {
   document.getElementById('share-file-input').value = '';
   document.getElementById('share-folder-input').value = '';
   document.getElementById('share-link-box').classList.add('hidden');
-  
   document.getElementById('share-rename-section').classList.add('hidden');
   document.getElementById('share-rename-status').textContent = '';
   state.activeShareId = null;
-  
-  document.getElementById('share-drop-zone-container').style.display = 'block';
-  document.getElementById('share-upload-progress-container').style.display = 'none';
+
+  document.getElementById('share-drop-zone-container').classList.remove('hidden');
+  document.getElementById('share-upload-progress-container').classList.add('hidden');
+  const fill = document.getElementById('share-progress-fill');
+  if (fill) { fill.className = 'share-progress-fill indeterminate'; fill.style.width = ''; }
   document.getElementById('btn-share-close').textContent = 'Cancel';
-  
+
   document.getElementById('share-create-overlay').classList.remove('hidden');
 });
 
@@ -109,8 +117,8 @@ shareDropZone.addEventListener('drop', async e => {
       const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
       if (entry && entry.isDirectory) {
         const statusEl = document.getElementById('share-upload-status');
-        document.getElementById('share-drop-zone-container').style.display = 'none';
-        document.getElementById('share-upload-progress-container').style.display = 'block';
+        document.getElementById('share-drop-zone-container').classList.add('hidden');
+        document.getElementById('share-upload-progress-container').classList.remove('hidden');
         document.getElementById('share-upload-filename').textContent = entry.name + '.zip';
         statusEl.textContent = 'Zipping folder...';
         
@@ -140,9 +148,9 @@ shareFileInput.addEventListener('change', (e) => {
 shareFolderInput.addEventListener('change', async () => {
   if (shareFolderInput.files.length) {
     const statusEl = document.getElementById('share-upload-status');
-    document.getElementById('share-drop-zone-container').style.display = 'none';
-    document.getElementById('share-upload-progress-container').style.display = 'block';
-    
+    document.getElementById('share-drop-zone-container').classList.add('hidden');
+    document.getElementById('share-upload-progress-container').classList.remove('hidden');
+
     const firstFile = shareFolderInput.files[0];
     let folderName = 'folder';
     if (firstFile && firstFile.webkitRelativePath) {
@@ -172,10 +180,9 @@ function handleShareSelection(file) {
     alert('Share links are limited to 5 MB. Use a room for larger files.');
     return;
   }
-  document.getElementById('share-drop-zone-container').style.display = 'none';
-  document.getElementById('share-upload-progress-container').style.display = 'block';
+  document.getElementById('share-drop-zone-container').classList.add('hidden');
+  document.getElementById('share-upload-progress-container').classList.remove('hidden');
   document.getElementById('share-upload-filename').textContent = file.name;
-  
   createShareLink(file);
 }
 
@@ -237,9 +244,12 @@ function shareError(msg) {
   const metaEl = document.getElementById('share-receive-meta');
   const note = document.getElementById('share-receive-note');
   const iconWrapper = document.getElementById('share-icon-wrapper');
-  
+
   nameEl.textContent = 'Link Invalid';
   metaEl.textContent = '';
+  document.getElementById('share-ext-badge')?.classList.add('hidden');
+  document.getElementById('share-receive-size')?.classList.add('hidden');
+  document.getElementById('share-card-label').textContent = 'Shared File';
   
   note.textContent = msg;
   note.style.display = 'block';
@@ -274,6 +284,9 @@ async function receiveShareLink(id, keyB64) {
   note.style.display = 'none';
   btn.style.display = 'none';
   homeBtn.style.display = 'none';
+  document.getElementById('share-ext-badge')?.classList.add('hidden');
+  document.getElementById('share-receive-size')?.classList.add('hidden');
+  document.getElementById('share-card-label').textContent = 'Shared File';
   
   iconWrapper.className = 'share-icon-wrapper loading';
   iconWrapper.innerHTML = `
@@ -319,13 +332,26 @@ async function receiveShareLink(id, keyB64) {
     return;
   }
 
-  nameEl.textContent = payload.filename || 'file';
-  metaEl.textContent = payload.size ? fmtSize(payload.size) + ' · AES-256-GCM' : 'AES-256-GCM encrypted';
-  
-  note.textContent = 'This link is single-use and will self-destruct once downloaded.';
+  const filename = payload.filename || 'file';
+  nameEl.textContent = filename;
+
+  const extBadge = document.getElementById('share-ext-badge');
+  const ext = filename.includes('.') ? filename.split('.').pop().toUpperCase().slice(0, 6) : null;
+  if (ext && extBadge) { extBadge.textContent = ext; extBadge.classList.remove('hidden'); }
+
+  const sizeEl = document.getElementById('share-receive-size');
+  if (sizeEl) {
+    if (payload.size) { sizeEl.textContent = fmtSize(payload.size); sizeEl.classList.remove('hidden'); }
+    else { sizeEl.classList.add('hidden'); }
+  }
+  metaEl.innerHTML = `<span class="share-enc-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="11" height="11"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>AES-256-GCM</span>`;
+
+  document.getElementById('share-card-label').textContent = 'Ready to download';
+
+  note.textContent = 'Single-use — link self-destructs after download.';
   note.className = 'share-receive-note info-note';
   note.style.display = 'block';
-  
+
   iconWrapper.className = 'share-icon-wrapper success';
   iconWrapper.innerHTML = `
     <svg class="share-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -337,7 +363,6 @@ async function receiveShareLink(id, keyB64) {
   `;
 
   btn.style.display = 'block';
-  btn.textContent = 'Download File';
   btn.disabled = false;
   homeBtn.style.display = 'block';
 

@@ -2,6 +2,12 @@ const APP_VERSION = 'v55';
 
 const CHANGELOG = [
   {
+    version: 'v61',
+    changes: [
+      'improved share link UI: file type badge, encryption pill, progress bar during encrypt/upload'
+    ]
+  },
+  {
     version: 'v60',
     changes: [
       'fix share link download always showing decryption failed',
