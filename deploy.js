@@ -2,6 +2,7 @@
 const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { minify } = require('terser');
 
 const root = __dirname;
 
@@ -18,10 +19,30 @@ fs.writeFileSync(swPath, fs.readFileSync(swPath, 'utf8')
 
 console.log(`Deploying v${count} (cache: drop-${stamp})`);
 
-const result = spawnSync('npx', ['wrangler', 'deploy'], {
-  cwd: root,
-  stdio: 'inherit',
-  env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: '5745d698d83c15e655924b25248a3029' },
-});
+// Minify JS files in-place for deploy, restore readable source afterward
+const jsDirs = [path.join(root, 'public/src')];
+const originals = {};
 
-process.exit(result.status ?? 0);
+(async () => {
+  for (const dir of jsDirs) {
+    for (const file of fs.readdirSync(dir)) {
+      if (!file.endsWith('.js')) continue;
+      const fullPath = path.join(dir, file);
+      const src = fs.readFileSync(fullPath, 'utf8');
+      originals[fullPath] = src;
+      const result = await minify(src, { ecma: 2020, compress: true, mangle: true });
+      if (result.code) fs.writeFileSync(fullPath, result.code);
+    }
+  }
+
+  const result = spawnSync('npx', ['wrangler', 'deploy'], {
+    cwd: root,
+    stdio: 'inherit',
+    env: process.env,
+  });
+
+  // Restore readable source
+  for (const [p, src] of Object.entries(originals)) fs.writeFileSync(p, src);
+
+  process.exit(result.status ?? 0);
+})();

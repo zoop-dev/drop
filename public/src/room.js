@@ -14,6 +14,14 @@ function resolveConnected() {
   if (connectedResolve) { connectedResolve(); connectedResolve = null; connectedPromise = null; }
 }
 
+async function waitForPeer(peerId, fileId, gen) {
+  while (!state.peers[peerId]) {
+    await new Promise(r => setTimeout(r, 200));
+    if (state.sendGeneration[fileId] !== gen) return false;
+  }
+  return true;
+}
+
 function connect(code) {
   if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(); }
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -66,6 +74,7 @@ async function handleMessage(msg) {
       break;
     }
     case 'batch-accept': startSendingBatch(msg.from, msg.batchId); break;
+    case 'chunk-ack': state.ackCount[msg.fileId] = msg.n; break;
     case 'version-sync': if (parseInt(APP_VERSION.slice(1)) < parseInt(msg.v.slice(1))) { const b = document.getElementById('update-banner'); if (b) b.classList.add('is-on'); } break;
     case 'rtc-offer': handleRtcOffer(msg); break;
     case 'rtc-answer': handleRtcAnswer(msg); break;
@@ -131,6 +140,12 @@ function removePeer(id) {
       if (entry.pendingTargets.has(id)) {
         markTransferStatus(entry.fileId, 'Connection lost', 'transfer-error');
         entry.pendingTargets.delete(id);
+      }
+      if (entry.activeSendTarget === id && !entry.done) {
+        state.sendGeneration[entry.fileId] = (state.sendGeneration[entry.fileId] ?? 0) + 1;
+        markTransferStatus(entry.fileId, 'Connection lost', 'transfer-error');
+        entry.activeSendTarget = null;
+        entry.done = true;
       }
     });
     state.requestQueue = [];
@@ -639,19 +654,30 @@ async function startSendingFile(fromPeerId, fileId, fromChunk = 0) {
   const total = Math.ceil(totalBytes / CHUNK_SIZE);
   let offset = fromChunk * CHUNK_SIZE;
   let index = fromChunk;
+  entry.total = total;
+  entry.activeSendTarget = fromPeerId;
+  if (fromChunk === 0) state.ackCount[fileId] = 0;
   const approxPct = Math.min(99, (offset / totalBytes) * 100);
   updateProgress(fileId, fromChunk > 0 ? approxPct : 0, fromChunk > 0 ? 'Resuming...' : 'Sending...');
   const startTime = Date.now();
 
   try {
     while (offset < totalBytes) {
-      if (state.sendGeneration[fileId] !== gen) return; // preempted by a newer resume
+      if (state.sendGeneration[fileId] !== gen) return;
       if (state.cancelledTransfers.has(fileId)) {
         state.cancelledTransfers.delete(fileId);
         send({ type: 'transfer-cancel', to: fromPeerId, fileId });
         markTransferStatus(fileId, 'Cancelled', '');
+        entry.activeSendTarget = null;
         return;
       }
+      await waitConnected();
+      if (!state.peers[fromPeerId]) {
+        updateProgress(fileId, Math.min(99, (state.ackCount[fileId] || 0) / total * 100), 'Waiting...');
+        const ok = await waitForPeer(fromPeerId, fileId, gen);
+        if (!ok) return; // preempted by resume-request or give-up timer
+      }
+      if (state.sendGeneration[fileId] !== gen) return;
       const buffer = srcBuf ? srcBuf.slice(offset, offset + CHUNK_SIZE)
                             : await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer();
       const { iv, data } = await encryptChunkRaw(key, buffer);
@@ -673,12 +699,16 @@ async function startSendingFile(fromPeerId, fileId, fromChunk = 0) {
     send({ type: 'transfer-complete', to: fromPeerId, fileId });
     markTransferStatus(fileId, 'Sent', 'transfer-done');
     entry.srcBuf = null;
+    entry.activeSendTarget = null;
     entry.done = true;
+    delete state.ackCount[fileId];
   } catch {
     send({ type: 'transfer-error', to: fromPeerId, fileId });
     markTransferStatus(fileId, 'Failed to send', 'transfer-error');
     entry.srcBuf = null;
+    entry.activeSendTarget = null;
     entry.done = true;
+    delete state.ackCount[fileId];
   }
 }
 
@@ -789,6 +819,9 @@ async function handleBinaryMessage(buffer) {
     const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, state.decryptKeys[fileId], ciphertext);
     recv.chunks[index] = decrypted;
     recv.received++;
+    if (recv.received % 50 === 0 || recv.received >= total) {
+      send({ type: 'chunk-ack', to: from, fileId, n: recv.received });
+    }
     const recvPct = recv.received / total;
     const recvElapsed = (Date.now() - recv.startTime) / 1000 || 0.001;
     const recvSpeed = (recvPct * recv.size) / recvElapsed;

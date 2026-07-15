@@ -116,7 +116,7 @@ document.getElementById('back-btn').addEventListener('click', () => {
   if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(1000); }
   Object.values(state.reconnectTimers).forEach(clearTimeout);
   Object.values(state.rtcPeers).forEach(p => { try { p.dc?.close(); } catch {} try { p.pc.close(); } catch {} });
-  Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, fileBatch: {}, batchRecvState: {}, batchProgress: {}, sendQueue: [], cancelledTransfers: new Set(), mySubnet: null, myV6: null, myAddressFamily: null, myPubHash: null, lobby: null, lobbyId: null, lobbyPeers: {}, peersByDid: {}, reconnectTimers: {}, sendGeneration: {}, rtcPeers: {} });
+  Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, fileBatch: {}, batchRecvState: {}, batchProgress: {}, sendQueue: [], cancelledTransfers: new Set(), mySubnet: null, myV6: null, myAddressFamily: null, myPubHash: null, lobby: null, lobbyId: null, lobbyPeers: {}, peersByDid: {}, reconnectTimers: {}, sendGeneration: {}, rtcPeers: {}, ackCount: {} });
   connectedResolve = null; connectedPromise = null;
   const list = document.getElementById('peers-list');
   list.innerHTML = '';
@@ -296,7 +296,7 @@ window.addEventListener('popstate', () => {
     } else {
       Object.values(state.reconnectTimers).forEach(clearTimeout);
       Object.values(state.rtcPeers).forEach(p => { try { p.dc?.close(); } catch {} try { p.pc.close(); } catch {} });
-      Object.assign(state, { roomCode: null, myId: null, isCreator: false, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, fileBatch: {}, batchRecvState: {}, batchProgress: {}, sendQueue: [], cancelledTransfers: new Set(), peersByDid: {}, reconnectTimers: {}, sendGeneration: {}, rtcPeers: {} });
+      Object.assign(state, { roomCode: null, myId: null, isCreator: false, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, fileBatch: {}, batchRecvState: {}, batchProgress: {}, sendQueue: [], cancelledTransfers: new Set(), peersByDid: {}, reconnectTimers: {}, sendGeneration: {}, rtcPeers: {}, ackCount: {} });
       connectedResolve = null; connectedPromise = null;
       const list = document.getElementById('peers-list');
       if (list) {
