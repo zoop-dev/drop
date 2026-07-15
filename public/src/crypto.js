@@ -44,9 +44,10 @@ async function compressBuffer(buffer) {
 async function decompressBuffer(buffer) {
   const ds = new DecompressionStream('gzip');
   const w = ds.writable.getWriter();
+  const result = new Response(ds.readable).arrayBuffer();
   await w.write(new Uint8Array(buffer));
   await w.close();
-  return new Response(ds.readable).arrayBuffer();
+  return result;
 }
 
 function uuidToBytes(uuid) {

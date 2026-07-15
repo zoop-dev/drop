@@ -2,10 +2,15 @@ const APP_VERSION = 'v55';
 
 const CHANGELOG = [
   {
+    version: 'v57',
+    changes: [
+      'fix save button not appearing for HTML, CSS, JSON and other compressed file types'
+    ]
+  },
+  {
     version: 'v56',
     changes: [
-      'fix save button not appearing for small/fast file transfers',
-      'separate error reporting for decrypt vs assembly failures'
+      'defensive null guards in transfer completion path'
     ]
   },
   {

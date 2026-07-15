@@ -872,8 +872,7 @@ async function handleBinaryMessage(buffer) {
         } else {
           blob = new Blob(ordered.map(c => new Uint8Array(c)), { type: recv.mimeType });
         }
-      } catch (e) {
-        console.error('File assembly failed:', e);
+      } catch {
         markTransferStatus(fileId, 'Failed to assemble file', 'transfer-error');
         delete state.recvState[fileId];
         delete state.decryptKeys[fileId];
@@ -885,8 +884,7 @@ async function handleBinaryMessage(buffer) {
       delete state.recvState[fileId];
       delete state.decryptKeys[fileId];
     }
-  } catch (e) {
-    console.error('Decryption failed:', e);
+  } catch {
     markTransferStatus(fileId, 'Decryption failed', 'transfer-error');
     delete state.recvState[fileId];
     delete state.decryptKeys[fileId];
