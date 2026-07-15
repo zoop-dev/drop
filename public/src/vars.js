@@ -1,6 +1,12 @@
-const APP_VERSION = 'v46';
+const APP_VERSION = 'v47';
 
 const CHANGELOG = [
+  {
+    version: 'v47',
+    changes: [
+      'WebRTC P2P upgrade — transfers go directly between devices when possible, falling back to relay if needed'
+    ]
+  },
   {
     version: 'v46',
     changes: [

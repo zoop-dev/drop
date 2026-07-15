@@ -55,7 +55,7 @@ async function handleMessage(msg) {
         }
       }
       break;
-    case 'peer-joined': addPeer(msg.peerId, msg.name, msg.ua, msg.did); break;
+    case 'peer-joined': addPeer(msg.peerId, msg.name, msg.ua, msg.did); if (rtcSupported()) initiateRtc(msg.peerId); break;
     case 'peer-left': removePeer(msg.peerId); break;
     case 'transfer-request': showIncomingRequest(msg); break;
     case 'batch-request': showIncomingRequest(msg); break;
@@ -66,6 +66,9 @@ async function handleMessage(msg) {
       break;
     }
     case 'batch-accept': startSendingBatch(msg.from, msg.batchId); break;
+    case 'rtc-offer': handleRtcOffer(msg); break;
+    case 'rtc-answer': handleRtcAnswer(msg); break;
+    case 'rtc-ice': handleRtcIce(msg); break;
     case 'transfer-decline': markTransferStatus(msg.fileId, 'Declined', 'transfer-error'); break;
     case 'batch-decline':
       state.sendQueue.filter(e => e.batchId === msg.batchId).forEach(e => markTransferStatus(e.fileId, 'Declined', 'transfer-error'));
@@ -113,6 +116,7 @@ function addPeer(id, name, ua, did) {
 }
 
 function removePeer(id) {
+  cleanupRtcPeer(id);
   const peer = state.peers[id];
   // Show "Reconnecting..." on transfers waiting for this peer
   state.sendQueue.forEach(entry => {
@@ -192,7 +196,7 @@ function renderPeers() {
       const dot = document.createElement('span');
       dot.className = 'dot';
       statusSpan.appendChild(dot);
-      statusSpan.append(' Connected');
+      statusSpan.append(state.rtcPeers[id]?.ready ? ' P2P' : ' Connected');
     }
     el.appendChild(infoDiv);
     el.appendChild(statusSpan);
@@ -650,7 +654,7 @@ async function startSendingFile(fromPeerId, fileId, fromChunk = 0) {
                             : await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer();
       const { iv, data } = await encryptChunkRaw(key, buffer);
       const meta = index === 0 ? { filename: file.name, size: file.size, mimeType } : null;
-      sendBinaryChunk(fromPeerId, fileId, index, total, iv, data, compressed, meta);
+      await sendBinaryChunk(fromPeerId, fileId, index, total, iv, data, compressed, meta);
       offset += buffer.byteLength;
       index++;
       const elapsed = (Date.now() - startTime) / 1000 || 0.001;
@@ -725,14 +729,18 @@ async function enterRoom(code, isCreator, showCode = true) {
   }
 }
 
-function sendBinaryChunk(toPeerId, fileId, index, total, iv, ciphertext, compressed, meta) {
+async function sendBinaryChunk(toPeerId, fileId, index, total, iv, ciphertext, compressed, meta) {
   const metaBytes = meta ? new TextEncoder().encode(JSON.stringify(meta)) : null;
   const flags = (compressed ? 1 : 0) | (meta ? 2 : 0);
   const headerSize = 53 + (metaBytes ? 2 + metaBytes.length : 0);
   const frame = new Uint8Array(headerSize + ciphertext.byteLength);
   const dv = new DataView(frame.buffer);
   let o = 0;
-  frame.set(uuidToBytes(toPeerId), o); o += 16;
+  const rtcPeer = state.rtcPeers[toPeerId];
+  const useDC = rtcPeer?.ready && rtcPeer.dc?.readyState === 'open' && state.myId;
+  // For WS: first 16B = toPeerId (server replaces with fromPeerId before delivery).
+  // For DC: first 16B = myId (receiver reads this field directly as the sender).
+  frame.set(uuidToBytes(useDC ? state.myId : toPeerId), o); o += 16;
   frame.set(uuidToBytes(fileId), o); o += 16;
   dv.setUint32(o, index, false); o += 4;
   dv.setUint32(o, total, false); o += 4;
@@ -740,7 +748,12 @@ function sendBinaryChunk(toPeerId, fileId, index, total, iv, ciphertext, compres
   frame.set(iv, o); o += 12;
   if (metaBytes) { dv.setUint16(o, metaBytes.length, false); o += 2; frame.set(metaBytes, o); o += metaBytes.length; }
   frame.set(new Uint8Array(ciphertext), o);
-  if (state.ws?.readyState === WebSocket.OPEN) state.ws.send(frame.buffer);
+  if (useDC) {
+    while (rtcPeer.dc.bufferedAmount > DC_BUFFER_HIGH) await new Promise(r => setTimeout(r, 10));
+    rtcPeer.dc.send(frame.buffer);
+  } else if (state.ws?.readyState === WebSocket.OPEN) {
+    state.ws.send(frame.buffer);
+  }
 }
 
 async function handleBinaryMessage(buffer) {

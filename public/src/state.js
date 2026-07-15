@@ -28,6 +28,7 @@ const state = {
   peersByDid: {},
   reconnectTimers: {},
   sendGeneration: {},
+  rtcPeers: {},
 };
 
 let connectedResolve = null;
