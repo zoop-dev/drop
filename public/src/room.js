@@ -122,7 +122,7 @@ function addPeer(id, name, ua, did) {
     const files = state.pendingShareFiles;
     state.pendingShareFiles = null;
     document.getElementById('share-banner')?.remove();
-    queueFiles(files);
+    pickTargetsAndSend(files);
   }
 }
 
@@ -216,6 +216,30 @@ function renderPeers() {
     }
     el.appendChild(infoDiv);
     el.appendChild(statusSpan);
+
+    el.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); el.classList.add('drag-over'); dropZone.classList.remove('dragging'); });
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', async e => {
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.remove('drag-over');
+      if (state.reconnecting) return;
+      const items = Array.from(e.dataTransfer.items || []);
+      const filesToQueue = [];
+      for (const item of items) {
+        if (item.kind !== 'file') continue;
+        const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+        if (entry && entry.isDirectory) {
+          const zipFile = await zipFolder(entry);
+          if (zipFile) filesToQueue.push(zipFile);
+        } else {
+          const file = item.getAsFile();
+          if (file) filesToQueue.push(file);
+        }
+      }
+      if (filesToQueue.length) queueFiles(filesToQueue, [id]);
+    });
+
     list.appendChild(el);
   });
   setDropEnabled(!state.reconnecting);
@@ -611,9 +635,65 @@ function showRoomError(msg) {
 }
 
 
-async function queueFiles(files) {
-  if (!Object.keys(state.peers).length) return;
+function pickTargetsAndSend(files) {
   const peerIds = Object.keys(state.peers);
+  if (peerIds.length <= 1) { queueFiles(files, peerIds); return; }
+
+  state.pendingFiles = files;
+  const listEl = document.getElementById('send-target-list');
+  listEl.innerHTML = '';
+  peerIds.forEach(id => {
+    const peer = state.peers[id];
+    const row = document.createElement('div');
+    row.className = 'send-target-peer';
+    row.dataset.peerId = id;
+    row.innerHTML = `
+      <div class="send-target-check">
+        <svg viewBox="0 0 12 10" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="10">
+          <polyline points="1 5 4.5 8.5 11 1"></polyline>
+        </svg>
+      </div>
+      <div>
+        <div class="send-target-peer-name">${peer.name}</div>
+        ${peer.ua ? `<div class="send-target-peer-ua">${peer.ua}</div>` : ''}
+      </div>`;
+    row.addEventListener('click', () => {
+      row.classList.toggle('selected');
+      updateSendConfirmBtn();
+    });
+    listEl.appendChild(row);
+  });
+
+  updateSendConfirmBtn();
+  document.getElementById('send-target-overlay').classList.remove('hidden');
+}
+
+function updateSendConfirmBtn() {
+  const selected = document.querySelectorAll('#send-target-list .send-target-peer.selected');
+  document.getElementById('btn-send-target-confirm').disabled = selected.length === 0;
+}
+
+document.getElementById('btn-send-target-confirm').addEventListener('click', () => {
+  const selected = Array.from(document.querySelectorAll('#send-target-list .send-target-peer.selected'));
+  const peerIds = selected.map(el => el.dataset.peerId);
+  document.getElementById('send-target-overlay').classList.add('hidden');
+  if (state.pendingFiles && peerIds.length) queueFiles(state.pendingFiles, peerIds);
+  state.pendingFiles = null;
+});
+
+document.getElementById('btn-send-target-all').addEventListener('click', () => {
+  document.getElementById('send-target-overlay').classList.add('hidden');
+  if (state.pendingFiles) queueFiles(state.pendingFiles);
+  state.pendingFiles = null;
+});
+
+document.getElementById('btn-send-target-cancel').addEventListener('click', () => {
+  document.getElementById('send-target-overlay').classList.add('hidden');
+  state.pendingFiles = null;
+});
+
+async function queueFiles(files, peerIds = Object.keys(state.peers)) {
+  if (!peerIds.length) return;
   
   if (files.length > 1) {
     const batchId = crypto.randomUUID();
@@ -974,14 +1054,13 @@ dropZone.addEventListener('drop', async e => {
           if (file) filesToQueue.push(file);
         }
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
       alert('Failed to process dropped directory.');
     } finally {
       sub.textContent = originalText;
     }
     
-    if (filesToQueue.length) queueFiles(filesToQueue);
+    if (filesToQueue.length) pickTargetsAndSend(filesToQueue);
   }
 });
 
@@ -1037,7 +1116,7 @@ async function zipFolder(folderEntry) {
 }
 
 fileInput.addEventListener('change', () => {
-  if (fileInput.files.length) queueFiles(Array.from(fileInput.files));
+  if (fileInput.files.length) pickTargetsAndSend(Array.from(fileInput.files));
   fileInput.value = '';
 });
 
@@ -1049,9 +1128,8 @@ folderInput.addEventListener('change', async () => {
     sub.textContent = 'Zipping folder...';
     try {
       const filesToQueue = await processSelectedFiles(folderInput.files);
-      if (filesToQueue.length) queueFiles(filesToQueue);
+      if (filesToQueue.length) pickTargetsAndSend(filesToQueue);
     } catch (err) {
-      console.error(err);
       alert('Failed to process selected folder.');
     } finally {
       sub.innerHTML = originalText;

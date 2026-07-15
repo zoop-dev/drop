@@ -23,6 +23,7 @@ const state = {
   lobbyPeers: {},
   pendingLobbyConnect: null,
   pendingShareFiles: null,
+  pendingFiles: null,
   activeShareId: null,
   batchProgress: {},
   peersByDid: {},

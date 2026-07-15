@@ -76,7 +76,7 @@ document.addEventListener('paste', e => {
   if (e.target.matches('input, textarea, [contenteditable]')) return;
   const items = Array.from(e.clipboardData.items);
   const files = items.filter(it => it.kind === 'file').map(it => it.getAsFile()).filter(Boolean);
-  if (files.length) { e.preventDefault(); queueFiles(files); return; }
+  if (files.length) { e.preventDefault(); pickTargetsAndSend(files); return; }
   const textItem = items.find(it => it.kind === 'string' && it.type === 'text/plain');
   if (textItem && Object.keys(state.peers).length) {
     e.preventDefault();
@@ -116,7 +116,8 @@ document.getElementById('back-btn').addEventListener('click', () => {
   if (state.ws) { state.ws.onclose = null; state.ws.onerror = null; state.ws.close(1000); }
   Object.values(state.reconnectTimers).forEach(clearTimeout);
   Object.values(state.rtcPeers).forEach(p => { try { p.dc?.close(); } catch {} try { p.pc.close(); } catch {} });
-  Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, fileBatch: {}, batchRecvState: {}, batchProgress: {}, sendQueue: [], cancelledTransfers: new Set(), mySubnet: null, myV6: null, myAddressFamily: null, myPubHash: null, lobby: null, lobbyId: null, lobbyPeers: {}, peersByDid: {}, reconnectTimers: {}, sendGeneration: {}, rtcPeers: {}, ackCount: {} });
+  Object.assign(state, { roomCode: null, myId: null, isCreator: false, ws: null, reconnecting: false, peers: {}, requestQueue: [], activeRequest: null, decryptKeys: {}, recvState: {}, fileBatch: {}, batchRecvState: {}, batchProgress: {}, sendQueue: [], cancelledTransfers: new Set(), mySubnet: null, myV6: null, myAddressFamily: null, myPubHash: null, lobby: null, lobbyId: null, lobbyPeers: {}, peersByDid: {}, reconnectTimers: {}, sendGeneration: {}, rtcPeers: {}, ackCount: {}, pendingFiles: null });
+  document.getElementById('send-target-overlay').classList.add('hidden');
   connectedResolve = null; connectedPromise = null;
   const list = document.getElementById('peers-list');
   list.innerHTML = '';

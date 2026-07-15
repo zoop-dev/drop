@@ -931,6 +931,97 @@ header {
   background: #000;
 }
 
+.peer-card.drag-over {
+  border-color: var(--blue);
+  background: var(--blue-dim);
+  box-shadow: 0 0 0 2px var(--blue-glow);
+}
+
+.peer-card.drag-over .peer-name {
+  color: var(--blue);
+}
+
+.send-target-card {
+  max-width: 360px;
+  width: 100%;
+}
+
+.send-target-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0 24px;
+}
+
+.send-target-peer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  user-select: none;
+}
+
+.send-target-peer:hover {
+  border-color: var(--blue-glow);
+  background: var(--blue-dim);
+}
+
+.send-target-peer.selected {
+  border-color: var(--blue);
+  background: var(--blue-dim);
+}
+
+.send-target-peer input[type="checkbox"] {
+  display: none;
+}
+
+.send-target-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.send-target-peer.selected .send-target-check {
+  border-color: var(--blue);
+  background: var(--blue);
+}
+
+.send-target-check svg {
+  display: none;
+}
+
+.send-target-peer.selected .send-target-check svg {
+  display: block;
+}
+
+.send-target-peer-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.send-target-peer-ua {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.btn-send-target-confirm:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .btn-share-link {
   flex: 1;
   background: rgba(255, 255, 255, 0.01);
