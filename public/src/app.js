@@ -217,7 +217,15 @@ document.getElementById('btn-changelog-close').addEventListener('click', () => {
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
 
-document.getElementById('update-banner-reload')?.addEventListener('click', () => location.reload());
+document.getElementById('update-banner-reload')?.addEventListener('click', async () => {
+  if ('serviceWorker' in navigator) {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map(r => r.unregister()));
+  }
+  const keys = await caches.keys();
+  await Promise.all(keys.map(k => caches.delete(k)));
+  location.reload();
+});
 document.getElementById('update-banner-close')?.addEventListener('click', () => {
   document.getElementById('update-banner')?.classList.remove('is-on');
 });
