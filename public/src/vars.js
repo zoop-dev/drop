@@ -1,6 +1,12 @@
-const APP_VERSION = 'v55';
+const APP_VERSION = 'v65';
 
 const CHANGELOG = [
+  {
+    version: 'v65',
+    changes: [
+      'test ship integration',
+    ],
+  },
   {
     version: 'v64',
     changes: [
